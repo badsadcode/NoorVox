@@ -1,4 +1,4 @@
-# NoorVox architecture (as implemented, v0.1.0-dev / Phases 1–2)
+# NoorVox architecture (as implemented, v0.1.0-dev / Phases 1–3)
 
 Decisions and measurements: [ADR-0001](adr/0001-kokoro-backend-and-worker-model.md). Target design: [design/NOORVOX_DESIGN.md](design/NOORVOX_DESIGN.md).
 
@@ -48,6 +48,26 @@ Text → WAV logic lives once in `Core/Narration/NarrationService` and is used b
 | Single instance | Named mutex `Local\NoorVox.Studio`. |
 | Screenshots / smoke | `NoorVoxStudio.exe --page <p> --screenshot <png> [--screenshot-delay ms] [--exit-after-screenshot]`. `tools/studio-smoke.mjs` drives the real studio over the WebView2 DevTools protocol (localhost, test runs only): generate, monitor, unload, themes, quit, no leftover worker. |
 | Dev loop | `npm run dev` in `src/NoorVox.Studio.Web` runs the UI in a browser against `mock.ts` (clearly marked mock data). |
+
+## Projects (`Core/Projects`) — Phase 3
+
+| Piece | Responsibility |
+|---|---|
+| `ProjectModel` | File DTOs (`ProjectFile`, `SectionFile`, `Segment`, `TakeRecord`), project kinds (templates), segment statuses. Format: [PROJECT_FORMAT.md](PROJECT_FORMAT.md). |
+| `ProjectStore` | Create/open, atomic writes under a cross-process `write.lock`, stable id generation, add/remove/update segments, effective voice/speed, pronunciation, cacheKey, takes, status, approval (a pointer; take files are immutable). |
+| `ScriptImporter` | Markdown/text and dialogue CSV/JSON → sections/scenes/segments. Validates everything before writing; keeps the original read-only in `references/`. |
+| `JobRunner` | Persisted batch jobs: the file is written before the run and after every item; `job.lock` makes one runner per project; stale `running` jobs become `interrupted`; resume re-queues unfinished items. Synthesis is a delegate (`SegmentSynthesizer`), so tests use a fake engine. |
+| `ProjectGeneration` | Runs a job on a real worker via `WorkerLease` (the same lease logic as `synth` and the studio). |
+| `ProjectOverview` | Snapshot with per-segment status and counts, plus `Validate` (used by `projects show/validate` and the studio workspace). |
+| `ClipExporter` | Approved takes → id-named WAVs + `clips.json`; refuses missing approvals unless allowed; never overwrites silently. |
+
+A take is committed in order: synthesize into `.noorvox/tmp`, validate as PCM WAV, move to `takes/<seg>/<take>.wav`, then atomically write
+`<take>.json` (the commit marker), then update the job file. A crash at any point leaves either a complete take or nothing that counts.
+
+Studio: `ProjectsApi` adds `projects.*` bridge methods. Project paths are accepted only if they are in `studio.recentProjects`, which only native
+dialogs and Create extend. Jobs run in the background (one per project) and push `job.progress` / `job.status` / `job.finished` events. Takes are
+played from the virtual host `takes.noorvox.local`, mapped to the open project's `takes` folder. Closing the studio cancels running jobs, which
+become `interrupted` and resumable. `tools/studio-smoke-projects.mjs` exercises the workspace end to end in an isolated home.
 
 ## Storage (`Core/Storage`)
 
@@ -99,7 +119,8 @@ and provenance (text sha256, voice, speed, model sha256, backend, worker, timing
 - CPU only. DirectML fails on Kokoro's ConvTranspose; CUDA is untested (needs CUDA 12 + cuDNN 9).
 - Synthesis can't be cancelled mid-job (a KokoroSharp limitation): cancel = force-stop or recycle the worker.
 - Output is not bit-reproducible run to run, so take identity uses inputs, not audio hashes.
-- No projects, batch jobs, subtitles or export assembly yet (Phases 3–4).
+- No single-file episode assembly, subtitles or timing manifests yet (Phase 4). Segment split/merge and drag reordering aren't implemented.
+- Very large projects (thousands of segments) load the whole overview at once; list virtualisation is future work.
 - The studio's Export uses a native Save dialog, which the smoke test can't automate. It was verified by hand on 2026-11-20 (WAV + `.noorvox.json` written to Exports); re-check it manually after changes.
 - The catalog is embedded; remote catalog refresh (for new models/voice packs without an app update) is planned.
 - Future backends (e.g. Qwen TTS) plug in behind `ITtsBackend` in their own worker; they will likely need a GPU and a Python sidecar.

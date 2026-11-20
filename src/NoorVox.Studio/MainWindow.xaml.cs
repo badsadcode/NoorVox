@@ -14,6 +14,8 @@ public partial class MainWindow : Window
 {
     public const string AppHost = "app.noorvox.local";
     public const string MediaHost = "media.noorvox.local";
+    public const string TakesHost = "takes.noorvox.local";
+    string? _mappedTakesDir;
 
     readonly StudioOptions _options;
     /// <summary>Kill-on-close job shared by all studio-bound workers: if the studio dies, Windows ends them.</summary>
@@ -105,6 +107,16 @@ public partial class MainWindow : Window
         _mappedPreviewDir = dir;
     }
 
+    /// <summary>Maps the open project's takes folder so the UI can play takes (one open project at a time).</summary>
+    public void MapProjectTakes(string takesDir)
+    {
+        Directory.CreateDirectory(takesDir);
+        if (string.Equals(takesDir, _mappedTakesDir, StringComparison.OrdinalIgnoreCase)) return;
+        if (_mappedTakesDir is not null) Web.CoreWebView2.ClearVirtualHostNameToFolderMapping(TakesHost);
+        Web.CoreWebView2.SetVirtualHostNameToFolderMapping(TakesHost, takesDir, CoreWebView2HostResourceAccessKind.Allow);
+        _mappedTakesDir = takesDir;
+    }
+
     static void CleanOldPreviews(StorageContext storage)
     {
         try
@@ -158,6 +170,7 @@ public partial class MainWindow : Window
     {
         if (_closeReady) { base.OnClosing(e); return; }
         e.Cancel = true;
+        _api?.Projects.CancelAll(); // running jobs become "interrupted" and can be resumed next time
         try
         {
             var storage = StorageContext.Load();

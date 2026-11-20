@@ -1,15 +1,18 @@
 import { isHosted } from "./bridge";
 import { StateBadge } from "./components/Common";
-import { Box, Gear, Logo, Mic, Pulse } from "./components/Icons";
+import { Box, Folder, Gear, Logo, Mic, Pulse } from "./components/Icons";
 import { Models } from "./pages/Models";
 import { Monitor } from "./pages/Monitor";
 import { Narrate } from "./pages/Narrate";
+import { Project } from "./pages/Project";
+import { Projects } from "./pages/Projects";
 import { Settings } from "./pages/Settings";
 import { Setup } from "./pages/Setup";
 import { useStudio, type Page } from "./studio";
 
 const nav: { id: Page; label: string; icon: typeof Mic }[] = [
-  { id: "narrate", label: "Narrate", icon: Mic },
+  { id: "projects", label: "Projects", icon: Folder },
+  { id: "narrate", label: "Quick narration", icon: Mic },
   { id: "models", label: "Models & voices", icon: Box },
   { id: "monitor", label: "Monitor", icon: Pulse },
   { id: "settings", label: "Settings", icon: Gear },
@@ -27,7 +30,7 @@ export function App() {
           <div><b>NoorVox</b><span>Local AI Voice Studio</span></div>
         </div>
         {nav.map(({ id, label, icon: Icon }) => (
-          <button key={id} className="nav-btn" aria-current={page === id ? "page" : undefined} onClick={() => go(id)}>
+          <button key={id} className="nav-btn" aria-current={page === id || (id === "projects" && page === "project") ? "page" : undefined} onClick={() => go(id)}>
             <Icon /><span>{label}</span>
           </button>
         ))}
@@ -39,6 +42,8 @@ export function App() {
 
       <main className="main">
         {page === "setup" && <Setup />}
+        {page === "projects" && <Projects />}
+        {page === "project" && <Project />}
         {page === "narrate" && <Narrate />}
         {page === "models" && <Models />}
         {page === "monitor" && <Monitor />}

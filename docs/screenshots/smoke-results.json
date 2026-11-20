@@ -1,5 +1,5 @@
 {
-  "when": "2026-11-20T15:42:08.013Z",
+  "when": "2026-11-20T16:06:00.085Z",
   "results": [
     {
       "name": "UI loads with real voices",
@@ -14,12 +14,12 @@
     {
       "name": "real narration generated in GUI",
       "ok": true,
-      "detail": "15.4 s measuredGeorge · 1.00×24 kHz · 16-bit monogenerated in 3.5 s (CPU) (5.0 s incl. engine start)"
+      "detail": "15.4 s measuredGeorge · 1.00×24 kHz · 16-bit monogenerated in 3.9 s (CPU) (5.5 s incl. engine start)"
     },
     {
       "name": "engine is ready with model loaded",
       "ok": true,
-      "detail": "state=ready pid=21800"
+      "detail": "state=ready pid=57524"
     },
     {
       "name": "studio engine is bound to the studio (stop-on-exit default)",
@@ -34,12 +34,12 @@
     {
       "name": "unload recycles to a new process",
       "ok": true,
-      "detail": "pid 21800 → 38572, memory 1006 MB → 46 MB"
+      "detail": "pid 57524 → 60228, memory 983 MB → 47 MB"
     },
     {
       "name": "second generate reloads engine",
       "ok": true,
-      "detail": "pid=38572"
+      "detail": "pid=60228"
     },
     {
       "name": "studio closes cleanly",
@@ -49,7 +49,7 @@
     {
       "name": "no worker left consuming resources after close",
       "ok": true,
-      "detail": "worker pid 38572 gone"
+      "detail": "worker pid 60228 gone"
     }
   ]
 }

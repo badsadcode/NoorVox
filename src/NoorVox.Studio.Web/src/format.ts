@@ -33,3 +33,6 @@ export const shortHash = (h: string) => (h.length > 12 ? `${h.slice(0, 8)}…${h
 export const estimateSeconds = (words: number, speed: number) => (words / 150) * 60 / speed;
 
 export const wordCount = (t: string) => (t.trim() ? t.trim().split(/\s+/).length : 0);
+
+/** "1 episode", "6 segments" (English; labels come from the project template). */
+export const plural = (n: number, word: string) => `${n} ${word.toLowerCase()}${n === 1 ? "" : "s"}`;

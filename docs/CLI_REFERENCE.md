@@ -1,7 +1,7 @@
 # NoorVox CLI reference
 
 `noorvox.exe` is the headless interface to NoorVox. It never starts WebView2, and it never prompts.
-This document covers **what is implemented in v0.1.0-dev (Phase 1)**. Anything not listed here does not exist yet.
+This document covers **what is implemented in v0.1.0-dev (Phases 1–3)**. Anything not listed here does not exist yet.
 
 - Machine-readable help: `noorvox --help --json` (commands, options, exit codes).
 - Contract version: envelope `schemaVersion: 1`.
@@ -169,7 +169,83 @@ Stopping a crashed (`error`) worker clears its stale record. `--graceful` is acc
 Durations are **measured from the written WAV's samples**, never estimated. The file is synthesized into `<temp>\synth`,
 validated as PCM WAV, then moved to `--out`; a failed run leaves no partial file at `--out`.
 
+## Projects (Phase 3)
+
+The project format is described in [PROJECT_FORMAT.md](PROJECT_FORMAT.md). Every project command takes `--project DIR` (the folder containing
+`noorvox.project.json`).
+
+### `noorvox projects create --path DIR --title TITLE [--kind KIND] [--voice ID] [--model REF]`
+Creates the project folder. `DIR` must be new or empty. Kinds: `documentary`, `audiobook`, `dialogue`, `narration` (default), `education`, `custom`.
+`--voice` sets the default voice. `data`: `root`, `project`, `kind` (labels, id prefix, default pauses).
+
+### `noorvox projects import --project DIR --file FILE [--format md|txt|csv|json]`
+Appends sections from a script: Markdown/text headings and paragraphs, or a dialogue CSV/JSON with `line_id, character, text[, set, notes]`.
+Ids are validated before anything is written; on error (e.g. a duplicate `line_id`) the project is unchanged (exit 5). The original is kept
+read-only in `references/`. `data`: `reference`, `sections[] {sectionId, title, scenes, segments, firstSegmentId}`, `speakers`.
+
+### `noorvox projects show --project DIR [--segments] [--no-text]`
+Summary: `title, kind, labels, model, defaults, speakers, segments, counts {approved, generated, stale, missing, empty}, approvedDurationMs,
+sections[] {sectionId, title, scenes, segments, counts}, recentJobs, warnings`. With `--segments`, `data` is `{ summary, sections }`, where `sections`
+holds every scene and segment: `segmentId, text, speakerId, effectiveVoice, effectiveSpeed, spokenText, status, takes, approvedTakeId,
+latestTakeId, durationMs, notes`. `--no-text` omits the text fields.
+
+### `noorvox projects validate --project DIR`
+Checks section files, unique and valid ids, known speakers, speed range, approved takes existing on disk, and that the voices used are installed.
+On problems it exits 5 with `data.problems[]`.
+
+### `noorvox projects cast --project DIR [--speaker ID] --voice ID [--speed X]`
+Without `--speaker`, sets the project default voice (and speed). With `--speaker`, sets that character's voice. Approved takes are untouched;
+affected segments become `stale` until regenerated and approved.
+
+### `noorvox generate --project DIR [--section ID] [--scene ID] [--segment ID[,ID…]] [--policy missing|all] [--approve] [--worker ID] [--keep-worker]`
+Creates a **job** for the scope (default: whole project) and runs it now, one segment at a time, using the same worker rules as `synth`.
+
+- `--policy missing` (default) reuses a take that matches the current text, voice, speed, model and pronunciation, and generates otherwise.
+  `all` always makes a new take.
+- `--approve` approves the resulting take for segments **without** an approved take. It never replaces an approval.
+- Each finished segment is committed (WAV, take record, job file) before the next one starts.
+- Progress per segment goes to stderr: `[3/6] ep01.s02.p001 generated (5.0 s)`.
+
+`data`: `job {jobId, state, total, done, failed, remaining, generated, reused, skipped, …}` (cumulative across runs of this job),
+`thisRun {generated, reused, skipped, failed}`, `items[] {segmentId, state, takeId, durationMs, error}`.
+
+Exit codes:
+
+| Exit | When | What `data` holds |
+|---|---|---|
+| 0 | Every item done | the job summary |
+| 8 `synthesis_failed` | Some items failed | the same data; the successful ones are kept |
+| 11 `cancelled` | Ctrl+C | `jobId` and the exact `resume` command |
+
+### `noorvox jobs list --project DIR`
+Jobs newest first, with the same summary fields. A job whose process died is reported as `interrupted`.
+
+### `noorvox jobs status --project DIR --job ID`
+One job with every item.
+
+### `noorvox jobs resume --project DIR --job ID [--worker ID] [--keep-worker]`
+Continues an interrupted job, or retries its failed items, from the first unfinished segment. Finished items are never redone.
+Output is the same as `generate`.
+
+### `noorvox takes list --project DIR --segment ID`
+`segmentId, text, status, approvedTakeId, takes[] {takeId, path, durationMs, voiceId, speed, createdAt, jobId, approved, matchesCurrent, spokenText}`.
+
+### `noorvox takes approve --project DIR --segment ID (--take ID | --latest)`
+Moves the approval pointer. Take files are immutable.
+
+### `noorvox takes unapprove --project DIR --segment ID`
+Clears the approval; no files are deleted.
+
+### `noorvox export clips --project DIR [--section ID] [--out DIR] [--allow-missing] [--overwrite]`
+Copies approved takes with id-based names: dialogue uses `npc_vendor_greeting_001.wav`, other kinds `001_ep01.s01.p001.wav`. It also writes
+`clips.json` (per clip: `segmentId, sectionId, sceneId, file, durationMs, sampleRate, text, speaker, voiceId, takeId, stale`).
+Default `--out`: `<project>\exports\<section|all>_clips_<timestamp>`.
+
+- Segments without an approved take fail the export (exit 5) unless `--allow-missing` is given; then they're skipped and listed in `missing`.
+- Approved-but-stale takes are exported and reported in `warnings`.
+- Existing files are never overwritten without `--overwrite`.
+
 ## Not implemented yet (planned)
 
-Projects (`projects validate`), batch generation (`generate segment/episode`), jobs (`jobs status`), export with subtitles,
-the GUI, GPU execution, remote catalog refresh, `models remove`. See docs/design/NOORVOX_DESIGN.md §12 for the target contract.
+Episode/chapter assembly into one WAV with pauses, SRT/VTT subtitles and timing manifests (Phase 4), GPU execution, remote catalog refresh,
+`models remove`, segment split/merge/reorder from the CLI. See docs/design/NOORVOX_DESIGN.md §12 for the target contract.

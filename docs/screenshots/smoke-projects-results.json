@@ -1,0 +1,55 @@
+{
+  "when": "2026-11-20T16:04:39.050Z",
+  "results": [
+    {
+      "name": "projects page lists the project",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "workspace shows the imported structure",
+      "ok": true,
+      "detail": "3 scenes"
+    },
+    {
+      "name": "segment edit autosaves to the script file",
+      "ok": true,
+      "detail": "Every engine starts somewhere. This one started on a rainy Tuesday."
+    },
+    {
+      "name": "scene generated and auto-approved in the GUI",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Stop now leaves a resumable, interrupted job",
+      "ok": true,
+      "detail": "interrupted 2/6"
+    },
+    {
+      "name": "resume completes the whole project",
+      "ok": true,
+      "detail": "{\"approved\":6}"
+    },
+    {
+      "name": "auto-approve did not replace the existing approval",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "explicit approval moves to the new take; old take kept",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "studio closes cleanly",
+      "ok": true,
+      "detail": "exit 0"
+    },
+    {
+      "name": "no worker left after close",
+      "ok": true,
+      "detail": "worker pid 21204"
+    }
+  ]
+}

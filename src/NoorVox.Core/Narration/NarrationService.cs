@@ -48,7 +48,7 @@ public sealed record NarrationResult(
 /// </summary>
 public sealed class NarrationService(StorageContext storage, WorkerSupervisor supervisor)
 {
-    public const string DefaultWorker = "default";
+    public const string DefaultWorker = WorkerLease.DefaultWorker;
     public const double MinSpeed = 0.5, MaxSpeed = 2.0;
 
     public async Task<NarrationResult> SynthesizeAsync(NarrationRequest req, Action<string>? progress, CancellationToken ct)
@@ -76,7 +76,12 @@ public sealed class NarrationService(StorageContext storage, WorkerSupervisor su
         Directory.CreateDirectory(tempDir);
         var tempWav = Path.Combine(tempDir, $"{Guid.NewGuid():N}.wav");
 
-        var (workerId, reused, started, keep) = await AcquireWorkerAsync(req, model, progress, ct);
+        var lease = await WorkerLease.AcquireAsync(storage, supervisor, model, new WorkerPolicy
+        {
+            WorkerId = req.WorkerId, KeepWorker = req.KeepWorker, Dedicated = req.DedicatedWorker,
+            DedicatedBoundToLauncher = req.DedicatedBoundToLauncher, DedicatedIdleTimeoutSeconds = req.DedicatedIdleTimeoutSeconds,
+        }, progress, ct);
+        string workerId = lease.Id;
         SynthesisResult result;
         try
         {
@@ -86,16 +91,12 @@ public sealed class NarrationService(StorageContext storage, WorkerSupervisor su
         catch
         {
             TryDelete(tempWav);
-            if (started && !keep) await SafeStopAsync(workerId);
+            await lease.DisposeAsync();
             throw;
         }
-
-        bool stoppedAfter = false;
-        if (started && !keep)
-        {
-            await SafeStopAsync(workerId);
-            stoppedAfter = true;
-        }
+        await lease.DisposeAsync();
+        bool stoppedAfter = lease.Stopped;
+        bool reused = lease.Reused, started = lease.Started;
 
         WavInfo info;
         try { info = WavInfo.Read(tempWav); }
@@ -125,66 +126,6 @@ public sealed class NarrationService(StorageContext storage, WorkerSupervisor su
             FileUtil.WriteAllTextAtomic(manifestPath, Json.Serialize(narration));
         }
         return narration;
-    }
-
-    async Task<(string Id, bool Reused, bool Started, bool Keep)> AcquireWorkerAsync(NarrationRequest req, InstalledModel model, Action<string>? progress, CancellationToken ct)
-    {
-        if (req.DedicatedWorker)
-        {
-            var dedicated = WorkerSupervisor.ValidateWorkerId(req.WorkerId ?? "studio");
-            var ds = await supervisor.GetStatusAsync(dedicated, ct);
-            bool startedNow = false;
-            if (ds.State is "stopped" or "error")
-            {
-                progress?.Invoke("Starting voice engine...");
-                ds = await supervisor.StartAsync(dedicated, req.DedicatedBoundToLauncher, req.DedicatedIdleTimeoutSeconds, ct);
-                startedNow = true;
-            }
-            if (ds.LoadedModel?.Directory != model.Directory)
-            {
-                progress?.Invoke($"Loading {model.Manifest.DisplayName}...");
-                await supervisor.LoadAsync(dedicated, model, ct);
-            }
-            return (dedicated, !startedNow, startedNow, true);
-        }
-
-        bool keep = req.KeepWorker;
-        var id = WorkerSupervisor.ValidateWorkerId(req.WorkerId ?? DefaultWorker);
-        var st = await supervisor.GetStatusAsync(id, ct);
-
-        if (st.State is "ready" or "generating" && st.LoadedModel?.Directory == model.Directory) return (id, true, false, true);
-        if (st.State is "idle")
-        {
-            progress?.Invoke($"Loading {model.Reference} into worker '{id}'...");
-            await supervisor.LoadAsync(id, model, ct);
-            return (id, true, false, true);
-        }
-        if (req.WorkerId is not null && st.State is not ("stopped" or "error"))
-            throw new NoorVoxException(ErrorCodes.WorkerBusy, ExitCode.WorkerBusy,
-                $"Worker '{id}' is {st.State} with {(st.LoadedModel is null ? "no model" : st.LoadedModel.Id + "@" + st.LoadedModel.Version)}; it can't serve {model.Reference} now.", st);
-
-        if (st.State is "stopped" or "error" && (req.WorkerId is not null || keep))
-        {
-            progress?.Invoke($"Starting worker '{id}'...");
-            await supervisor.StartAsync(id, boundToLauncher: !keep, keep ? storage.Settings.Workers.IdleTimeoutSeconds : 0, ct);
-        }
-        else
-        {
-            // A persistent 'default' worker serves another model (or is busy loading): use a private one-shot worker.
-            id = $"synth-{Environment.ProcessId}";
-            keep = false;
-            progress?.Invoke($"Starting one-shot worker '{id}'...");
-            await supervisor.StartAsync(id, boundToLauncher: true, 0, ct);
-        }
-        progress?.Invoke($"Loading {model.Reference}...");
-        await supervisor.LoadAsync(id, model, ct);
-        return (id, false, true, keep);
-    }
-
-    async Task SafeStopAsync(string id)
-    {
-        try { await supervisor.StopAsync(id, force: false, TimeSpan.FromSeconds(15), CancellationToken.None); }
-        catch (NoorVoxException) { await supervisor.StopAsync(id, force: true, TimeSpan.FromSeconds(5), CancellationToken.None); }
     }
 
     static void TryDelete(string path)

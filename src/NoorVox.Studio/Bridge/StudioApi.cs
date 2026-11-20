@@ -17,6 +17,8 @@ namespace NoorVox.Studio.Bridge;
 /// </summary>
 public sealed class StudioApi(MainWindow window, JobObject job, BridgeHost bridge, string workerExe)
 {
+    public ProjectsApi Projects { get; } = new(window, job, bridge, workerExe);
+
     public const string StudioWorker = "studio";
     static readonly string[] Themes = ["nocturne", "daylight", "tape", "thalassa", "graphite", "lavender"];
     static readonly string[] UrlHosts = ["huggingface.co", "github.com"];
@@ -26,6 +28,7 @@ public sealed class StudioApi(MainWindow window, JobObject job, BridgeHost bridg
 
     public async Task<object?> InvokeAsync(string method, JsonElement? p, CancellationToken ct) => method switch
     {
+        _ when method.StartsWith("projects.", StringComparison.Ordinal) => await Projects.InvokeAsync(method, p, ct),
         "app.info" => AppInfo(),
         "storage.get" => StorageGet(),
         "storage.choose" => await StorageChoose(Arg<KindArgs>(p)),

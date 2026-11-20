@@ -5,10 +5,11 @@
 NoorVox is a local voiceover studio for Windows: documentary narration, audiobooks, game dialogue, tutorials and quick voiceovers,
 generated **offline** with the Kokoro-82M model. It has no accounts, no paid API, and no cloud.
 
-**Status: v0.1.0-dev — Phase 2.** A headless CLI plus NoorVox Studio (WPF + WebView2 + React) with Quick Narration,
-model and voice management, and a truthful runtime monitor. Projects and batch production are Phase 3.
+**Status: v0.1.0-dev — Phase 3.** A headless CLI plus NoorVox Studio (WPF + WebView2 + React): projects for documentaries,
+audiobooks and game dialogue (import, takes, approvals, resumable batch generation, clip export), Quick Narration, model and voice
+management, and a truthful runtime monitor. Single-file episode assembly and subtitles are Phase 4.
 
-![NoorVox Studio](docs/screenshots/02-narrate-take.png)
+![NoorVox Studio](docs/screenshots/13-project-takes.png)
 
 See [CHANGELOG.md](CHANGELOG.md) for what exists and what is still planned.
 
@@ -41,6 +42,7 @@ Requirements: Windows 10/11 x64 and the Microsoft Edge WebView2 Runtime (studio)
 |---|---|
 | [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | Studio walkthrough with screenshots and mockup comparison |
 | [docs/CLI_REFERENCE.md](docs/CLI_REFERENCE.md) | Every command, flag, JSON field and exit code |
+| [docs/PROJECT_FORMAT.md](docs/PROJECT_FORMAT.md) | Project folder, scripts, takes, jobs, imports, statuses |
 | [docs/AI_INTEGRATION.md](docs/AI_INTEGRATION.md) | Tested cookbook for Codex and other agents |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Processes, IPC, storage, installer, known limitations |
 | [docs/adr/](docs/adr/) | Decisions with measurements |

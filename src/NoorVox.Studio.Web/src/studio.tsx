@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { call, errorText, on } from "./bridge";
 import type { AppInfo, Take, ThemeId, WorkerStatus, WorkersResponse } from "./types";
 
-export type Page = "narrate" | "models" | "monitor" | "settings" | "setup";
+export type Page = "projects" | "project" | "narrate" | "models" | "monitor" | "settings" | "setup";
 
 interface StudioState {
   info: AppInfo | null;
@@ -18,6 +18,9 @@ interface StudioState {
   /** Session takes live here, not in the Narrate page, so navigating away never loses them. */
   takes: Take[];
   setTakes: React.Dispatch<React.SetStateAction<Take[]>>;
+  /** The project open in the workspace (a path from the recent-projects allow-list). */
+  projectPath: string | null;
+  openProject: (path: string | null) => void;
 }
 
 const Ctx = createContext<StudioState>(null!);
@@ -25,7 +28,7 @@ export const useStudio = () => useContext(Ctx);
 
 const pageFromHash = (): Page | null => {
   const h = location.hash.replace(/^#\/?/, "");
-  return (["narrate", "models", "monitor", "settings", "setup"] as Page[]).includes(h as Page) ? (h as Page) : null;
+  return (["projects", "project", "narrate", "models", "monitor", "settings", "setup"] as Page[]).includes(h as Page) ? (h as Page) : null;
 };
 
 export function StudioProvider({ children }: { children: ReactNode }) {
@@ -34,6 +37,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   const [workers, setWorkers] = useState<WorkerStatus[]>([]);
   const [cpu, setCpu] = useState<Record<string, number>>({});
   const [takes, setTakes] = useState<Take[]>([]);
+  const [projectPath, setProjectPath] = useState<string | null>(() => { try { return localStorage.getItem("noorvox.project"); } catch { return null; } });
   const [toast, setToast] = useState<{ text: string; err: boolean } | null>(null);
   const [closing, setClosing] = useState<string | null>(null);
   const prev = useRef(new Map<string, { cpu: number; t: number }>());
@@ -100,7 +104,12 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <Ctx.Provider value={{ info, refreshInfo, page, go, workers, cpu, refreshWorkers, setTheme, notify, takes, setTakes }}>
+    <Ctx.Provider value={{ info, refreshInfo, page, go, workers, cpu, refreshWorkers, setTheme, notify, takes, setTakes, projectPath,
+      openProject: (path: string | null) => {
+        setProjectPath(path);
+        try { if (path) localStorage.setItem("noorvox.project", path); else localStorage.removeItem("noorvox.project"); } catch { /* ignore */ }
+        if (path) go("project");
+      } }}>
       {children}
       {toast && <div className={`toast ${toast.err ? "err" : ""}`} role="status">{toast.text}</div>}
       {closing && <div className="overlay"><div className="modal"><h3>Closing NoorVox Studio</h3><p className="muted">{closing}</p></div></div>}

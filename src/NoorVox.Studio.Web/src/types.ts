@@ -119,3 +119,50 @@ export interface Take {
   result: NarrationResult;
   exportedPath?: string;
 }
+
+// ---------------------------------------------------------------- projects (Phase 3) — mirrors Core/Projects
+
+export interface ProjectKind {
+  id: string; displayName: string; description: string; sectionLabel: string; sceneLabel: string; segmentLabel: string;
+  sectionPrefix: string; usesSpeakers: boolean;
+}
+
+export type SegmentStatusId = "empty" | "missing" | "generated" | "approved" | "stale";
+
+export interface SegmentView {
+  segmentId: string; text: string; speakerId: string | null; voiceOverride: string | null; speedOverride: number | null;
+  effectiveVoice: string; effectiveSpeed: number; spokenText: string; status: SegmentStatusId; takes: number;
+  approvedTakeId: string | null; latestTakeId: string | null; durationMs: number | null; notes: string | null;
+}
+export interface SceneView { sceneId: string; title: string; segments: SegmentView[] }
+export interface SectionView { sectionId: string; title: string; scenes: SceneView[]; counts: Partial<Record<SegmentStatusId, number>> }
+export interface Speaker { speakerId: string; name: string; voiceId: string | null; speed: number | null }
+
+export interface ProjectFile {
+  projectId: string; title: string; kind: string; createdAt: string; modifiedAt: string;
+  defaults: { model: string | null; voiceId: string | null; speed: number };
+  speakers: Speaker[];
+}
+
+export interface JobItem { segmentId: string; state: string; takeId?: string; durationMs?: number; error?: string }
+export interface GenerationJob {
+  jobId: string; state: string; policy: string; autoApprove: boolean; createdAt: string; finishedAt?: string;
+  items: JobItem[]; total: number; done: number; failedCount: number; remaining: number;
+}
+
+export interface ProjectOverview {
+  root: string; project: ProjectFile; kind: ProjectKind; model: string | null; sections: SectionView[];
+  counts: Partial<Record<SegmentStatusId, number>>; approvedDurationMs: number; segmentCount: number;
+  recentJobs: GenerationJob[]; warnings: string[];
+}
+
+export interface RecentProject { path: string; exists: boolean; title: string; kind: string; sections: number; modifiedAt: string | null }
+
+export interface TakeView {
+  takeId: string; durationMs: number; voiceId: string; speed: number; createdAt: string; spokenText: string;
+  approved: boolean; matchesCurrent: boolean; mediaUrl: string;
+}
+
+export interface JobProgressEvent {
+  path: string; jobId: string; state: string; done: number; total: number; failed: number; currentSegmentId: string | null; lastItem: JobItem | null;
+}

@@ -17,6 +17,8 @@ public sealed class StudioSettings
 {
     /// <summary>nocturne · daylight · tape · thalassa · graphite · lavender (see docs/design/themes.html).</summary>
     public string Theme { get; set; } = "nocturne";
+    /// <summary>Recently opened project folders (most recent first). Also the allow-list of projects the UI may address.</summary>
+    public List<string> RecentProjects { get; set; } = [];
 }
 
 /// <summary>Each storage class is independently configurable. <c>null</c> = use the default for the current home mode.</summary>

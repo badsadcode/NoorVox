@@ -17,6 +17,14 @@ Studio UI: `npm run dev` in `src/NoorVox.Studio.Web` (browser + mock bridge). Re
 node tools\studio-smoke.mjs src\NoorVox.Studio\bin\Debug\net10.0-windows\win-x64\NoorVoxStudio.exe docs\screenshots
 ```
 
+Projects end to end in the studio (isolated home, real models, opens a window):
+
+```powershell
+node tools\studio-smoke-projects.mjs <NoorVoxStudio.exe> <noorvox.exe> E:\AI\NoorVox\Models <new-scratch-dir> docs\screenshots
+```
+
+All three templates headless with the real model: `.\examples\production.ps1 -Noorvox <noorvox.exe> -WorkDir <new-dir>`.
+
 Tests use isolated temp homes (`NOORVOX_HOME`) and never touch the user's settings or workers.
 
 ## Rules
@@ -33,3 +41,5 @@ Tests use isolated temp homes (`NOORVOX_HOME`) and never touch the user's settin
 9. Model weights, voices and generated audio are never committed (`.gitignore`).
 10. **Studio bridge:** every new UI capability is an explicit method in `StudioApi` with validated parameters. Never expose raw paths,
     process launching or arbitrary URLs to JavaScript; keep disk and process work in C#. Keep `src/NoorVox.Studio.Web/src/types.ts` in sync.
+11. **Projects:** take files are immutable and never deleted by code; approval is only a pointer; auto-approve never replaces an approval;
+    every write goes through `ProjectStore` (atomic + locked). Keep `docs/PROJECT_FORMAT.md` in sync and bump `schemaVersion` for breaking changes.

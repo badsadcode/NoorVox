@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.1.0-dev — Phase 3: production workflows (2026-11-20)
+
+### Implemented and tested
+- Project format (folder of JSON + WAV, documented in PROJECT_FORMAT.md) with six templates: documentary, audiobook, dialogue,
+  narration, education, custom. Stable segment ids; per-section script files; speakers and casting; pronunciation replacements.
+- Import from Markdown/text (headings → sections/scenes, paragraphs → segments, HTML comments → notes) and dialogue CSV/JSON
+  (line ids, characters, sets). Validated before writing; originals kept read-only in references/.
+- Takes and approvals: every generation is a new immutable take; approval is a pointer; edits and recasts mark segments stale and never
+  touch approved takes; auto-approve fills only empty approvals.
+- Resumable batch jobs: persisted before and during execution, one runner per project, crash detection, resume without redoing finished
+  segments, soft stop (after current) and hard stop.
+- Clip export with id-based names and clips.json.
+- CLI: `projects create|import|show|validate|cast`, `generate`, `jobs list|status|resume`, `takes list|approve|unapprove`, `export clips`.
+- Studio: Projects page (templates, create, open, recents) and project workspace (tree, autosaving segment editor, status, takes comparison
+  and approval, generate scene/section/project, stop/resume, casting, clip export).
+- Shared `WorkerLease` (quick narration, CLI and project jobs use the same worker logic).
+- Tests: 38 xUnit tests (+9 project tests with a fake engine); `examples/production.ps1` (all three templates with the real model);
+  `tools/studio-smoke-projects.mjs` (10/10, including a GUI stop + resume); a real hard-kill of the CLI mid-job resumed correctly.
+
+### Fixed during Phase 3 testing
+- A rejected import could leave a reference copy behind; imports of the same file in the same second collided.
+- Job results mixed cumulative and per-run counts (now `job` + `thisRun`).
+
 ## 0.1.0-dev — Phase 2: NoorVox Studio (2026-11-20)
 
 ### Implemented and tested
@@ -35,6 +58,5 @@
 - Docs: CLI reference, AI integration cookbook, architecture, ADR-0001, AGENTS.md, a runnable example.
 
 ### Planned (not implemented)
-- Phase 3: projects (documentary/audiobook/dialogue), takes and approvals, batch jobs with resume.
 - Phase 4: export assembly, SRT/VTT, timing manifests, `generate`/`jobs`/`export` CLI verbs.
 - Remote catalog refresh, GPU execution (CUDA), more backends (e.g. Qwen TTS), `models remove`.

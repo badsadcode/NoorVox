@@ -16,6 +16,41 @@ Run `NoorVoxStudio.exe`. To build it from source, see the README. Only one studi
 2. **Install a voice.** One click installs Kokoro 82M with 54 voices (about 440 MB). Every file is checked against a known sha256.
 3. **Done.** Start narrating. You can skip setup and install a voice later from **Models & voices**.
 
+## Projects
+
+![Projects](screenshots/10-projects.png)
+
+Use a project for anything bigger than a quick line: a documentary episode, an audiobook, or a set of game dialogue.
+
+- **New project:** give it a name, pick a template (Documentary, Audiobook, Game dialogue, Narration, Education, Custom) and a narrator voice,
+  then choose where the folder goes. A project is a normal folder (see `PROJECT_FORMAT.md`), so you can back it up or move it.
+- **Import script…:** Markdown or text (`# Episode` / `# Chapter`, `## Scene`, paragraphs become segments; `<!-- notes -->` are kept as
+  notes, not spoken), or a dialogue CSV/JSON with `line_id, character, text`. The original file is kept, read-only, in `references/`.
+
+### Working in a project
+
+![Project workspace](screenshots/13-project-takes.png)
+
+- **Left:** episodes/chapters and their scenes, with approved counts (✔ when a scene is done).
+- **Middle:** the segments of the selected scene. Edit text directly; it saves automatically. Each segment shows its stable id, voice,
+  and status:
+  - ✔ **Approved**
+  - ● **Ready to review** (a take exists but isn't approved)
+  - ⚠ **Changed since approval** (you edited text or recast the voice; the approved take is kept until you choose)
+  - ○ **Not generated**
+- **Takes (n)** lists every take of a segment, newest first. Play and compare them, then **Approve** one. **New take** always adds a take;
+  it never throws one away, and approvals are never replaced automatically.
+- **Right, Generate:** choose the scene, the episode/chapter, or the whole project.
+  - *Approve new takes where nothing is approved yet* (on by default) saves clicking through a first pass.
+  - *New takes even if a matching take exists* forces fresh takes.
+  - While a job runs you see progress and the current segment, with **Stop after this one** and **Stop now**. Every finished segment is saved immediately.
+  - A stopped or crashed job shows **Resume**, which continues where it left off.
+- **Right, Voice / Cast:** the default voice, and for dialogue one voice per character. Recasting marks affected segments as changed.
+- **Export clips…** copies the approved takes into a folder you choose, named by id (`npc_vendor_greeting_001.wav`, `001_ep01.s01.p001.wav`),
+  plus `clips.json` with durations, text and speakers. Joining an episode into one file with pauses and subtitles comes in Phase 4.
+
+![Stopped job with Resume](screenshots/12-project-interrupted.png)
+
 ## Quick Narration
 
 ![Quick Narration with a take](screenshots/02-narrate-take.png)
@@ -82,7 +117,8 @@ The mockup (`design/NoorVox_Interface_Mockup.png`) was treated as guidance, not 
 | "Kokoro TTS (GPU) · VRAM 2.4 GB", "GPU: RTX 3080" | "Provider CPU · GPU unavailable" | GPU inference doesn't work yet (ADR-0001); the monitor shows what's true |
 | "Model Service" / "Embedding (optional)" rows | One row per real worker process | Those processes don't exist |
 | Generation progress "72%" | Phase text ("Starting voice engine…", "Synthesizing…") | Kokoro reports no percentage; invented percentages are banned (spec §13.2) |
-| Projects / Script / Library / Generate tabs, scene list, documentary hero | Narrate · Models & voices · Monitor · Settings | The project system is Phase 3; nothing that doesn't work is shown |
+| Projects / Script / Library / Generate tabs, scene list | Projects (tree, segment editor, takes, generate, cast) · Quick narration · Models & voices · Monitor · Settings | Same hierarchy, built for real (Phase 3); Library and the waveform transport per scene come with export assembly |
+| Documentary / Audiobook / Narration / Dialogue / Education / Custom tabs | The same six templates, chosen when creating a project | A template is a starting point, not a mode you switch |
 | Same information hierarchy | Navigation, main workspace, voice panel on the right, takes/player, status bar with engine state | Kept |
 
 ## Troubleshooting

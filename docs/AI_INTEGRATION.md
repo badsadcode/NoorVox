@@ -95,7 +95,7 @@ For long or tricky text, prefer `--text-file` (UTF-8) or `--stdin` over `--text`
 | 7 `worker_*` | `noorvox workers list --json`; for `error`/`unresponsive`: `noorvox workers stop --worker <id> --force --json` |
 | 9 `output_exists` | Choose a new `--out`, or ask before using `--overwrite` |
 | 10 `download_failed` | Run the same install command again; it resumes |
-| 11 `cancelled` | Nothing was published to `--out` |
+| 11 `cancelled` | Nothing was published to `--out`. For `generate`: finished segments are kept; run the `resume` command in `data` |
 
 Retries are safe. A failed `synth` never leaves a partial file at `--out`, and installs resume and verify.
 
@@ -110,11 +110,44 @@ Note for sandboxed agents: if your command runner kills its whole process tree o
 may be terminated with it. Persistent workers try to leave the caller's job, but some sandboxes forbid that.
 One-shot `synth` always works.
 
-## 7. Handing audio to a video agent
+## 7. Projects: batch production with resume
 
-Pass along the list of `{id, path, durationMs, text}` you collected (or the `.noorvox.json` manifests). Don't re-derive durations from
-the text: use `durationMs`. Episode-level assembly, subtitles (SRT/VTT) and timing manifests are planned for the project and export
-commands. They don't exist in v0.1.
+For anything longer than a few lines, use a **project**: stable segment ids, takes you can compare, approvals, and resumable jobs.
+`examples/production.ps1` runs all of this for a documentary, an audiobook and a game-dialogue set; it was run against v0.1.0-dev (Phase 3).
+
+```powershell
+$p = "E:\AI\NoorVox\Projects\NoorEngine Documentary"
+noorvox projects create --path $p --title "NoorEngine Documentary" --kind documentary --voice bm_george --json --quiet
+noorvox projects import --project $p --file "episode1.md" --json --quiet         # '# Episode', '## Scene', paragraphs
+$r = noorvox generate --project $p --approve --json --quiet | ConvertFrom-Json   # whole project; --section/--scene/--segment to narrow
+if ($LASTEXITCODE -eq 11) { noorvox jobs resume --project $p --job $r.data.jobId --json --quiet }   # after Ctrl+C / crash
+$clips = noorvox export clips --project $p --json --quiet | ConvertFrom-Json
+$clips.data.clips | Select-Object segmentId, file, durationMs, text
+```
+
+For game dialogue, import a CSV (`line_id,character,text[,set,notes]`), cast each character, generate, and export. The files are named by line id:
+
+```powershell
+noorvox projects import --project $dlg --file lines.csv --json --quiet
+noorvox projects cast --project $dlg --speaker vendor --voice am_michael --json --quiet
+noorvox generate --project $dlg --approve --json --quiet
+noorvox export clips --project $dlg --json --quiet          # -> npc_vendor_greeting_001.wav, … + clips.json
+```
+
+Rules for agents working with projects:
+
+- **Never overwrite approvals.** `--approve` only fills segments with no approval. To change one, `takes approve --segment ID --take ID`,
+  and only when the user asked for it.
+- **Interrupted?** Resume the job and don't start a new one: `jobs list` shows `interrupted` jobs, and `jobs resume` finishes them without redoing finished segments.
+  A new `generate --policy missing` is also safe (it reuses matching takes), but resuming keeps one job history.
+- **Edited text** makes approved segments `stale` (`projects show`). Regenerate them, then let the user approve.
+- **Check before handing off:** `projects show --json` → `counts.approved == segments`, or export with `--allow-missing` and report `missing`.
+
+## 8. Handing audio to a video agent
+
+Pass along `clips.json` from `export clips` (or the `{id, path, durationMs, text}` list you collected from `synth`). Don't re-derive durations
+from the text: use `durationMs`. Single-file episode assembly with pauses, SRT/VTT subtitles and a timing manifest are Phase 4.
+They don't exist in v0.1.
 
 ## Reference
 

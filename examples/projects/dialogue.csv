@@ -1,0 +1,7 @@
+line_id,character,text,set,notes
+npc_vendor_greeting_001,Vendor,"Welcome, traveller! Fresh bread, warm cloaks, and only slightly cursed amulets.",Market,cheerful
+npc_vendor_greeting_002,Vendor,"Back again? I knew the cloak would suit you.",Market,
+hero_ask_price_001,Alden,"How much for the amulet with the blinking eye?",Market,
+npc_vendor_price_001,Vendor,"For you? Forty coins. For anyone else, also forty coins.",Market,deadpan
+hero_decline_001,Alden,"I'll think about it.",Market,
+npc_vendor_bye_001,Vendor,"Safe travels. Don't let the eye watch you sleep.",Market,
