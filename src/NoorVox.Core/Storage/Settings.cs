@@ -38,6 +38,8 @@ public sealed class StoragePathSettings
     public string? Projects { get; set; }
     public string? Exports { get; set; }
     public string? WebView { get; set; }
+    /// <summary>Your microphone recordings (Voice lab), kept as WAV + JSON. Default: Documents\NoorVox\Recordings.</summary>
+    public string? Recordings { get; set; }
 }
 
 public sealed class WorkerSettings
@@ -48,7 +50,7 @@ public sealed class WorkerSettings
     public bool StopOnExit { get; set; } = true;
 }
 
-public enum StorageKind { Models, Cache, Temp, Projects, Exports, WebView }
+public enum StorageKind { Models, Cache, Temp, Projects, Exports, WebView, Recordings }
 
 public enum HomeMode
 {

@@ -138,13 +138,21 @@ public sealed class QwenBackend(Action<string> log) : ITtsBackend, IBackendResou
         var caps = _model.Capabilities;
         if (Math.Abs(request.Speed - 1.0) > 1e-9)
             throw new NoorVoxException(ErrorCodes.Unsupported, ExitCode.InvalidArguments, "Qwen3-TTS has no speed control; ask for a pace in the style instead.");
-        if (!string.IsNullOrWhiteSpace(request.Style) && !caps.Style)
+        if (!string.IsNullOrWhiteSpace(request.Style) && !caps.Style && !caps.Design)
             throw new NoorVoxException(ErrorCodes.Unsupported, ExitCode.InvalidArguments, $"{_model.Manifest.DisplayName} does not take style directions.");
+        if (caps.Design && string.IsNullOrWhiteSpace(request.Style))
+            throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "VoiceDesign needs a description of the voice.");
 
         var seed = request.Seed ?? RandomNumberGenerator.GetInt32(0, int.MaxValue);
         var msg = new JsonObject { ["op"] = "synth", ["text"] = request.Text, ["seed"] = seed, ["out"] = Path.GetFullPath(outputWavPath) };
         string language;
-        if (caps.Cloning)
+        if (caps.Design)
+        {
+            msg["mode"] = "design";
+            msg["instruct"] = request.Style!.Trim(); // the description *is* the voice
+            language = request.Language ?? "auto";
+        }
+        else if (caps.Cloning)
         {
             var profile = FindProfile(request.VoiceId);
             msg["mode"] = "clone";

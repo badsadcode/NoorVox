@@ -69,7 +69,7 @@ Health check. It always exits 0 when it can run. Read `data.healthy` and `data.i
 Shows the configured and resolved path for each storage class: `models`, `cache`, `temp`, `projects`, `exports`, `webview`.
 For each one it reports `path`, `source` (`configured` / `default…`), `drive`, `exists` and `freeBytes`. It never creates folders.
 
-### `noorvox storage set [--models DIR] [--cache DIR] [--temp DIR] [--projects DIR] [--exports DIR] [--webview DIR]`
+### `noorvox storage set [--models DIR] [--cache DIR] [--temp DIR] [--projects DIR] [--exports DIR] [--webview DIR] [--recordings DIR]`
 Each path is created, checked by writing a probe file, and saved. Pass the value `default` to reset one path.
 Existing files are **not moved**. C: is allowed.
 
@@ -174,7 +174,7 @@ Creates a new voice as a weighted average of 2–4 installed voices, e.g. `--mix
 `data`: `voiceId, name, path, sha256, parts[] {voiceId, weight}, language`.
 
 ### `noorvox voices clone --name NAME --reference FILE.wav (--transcript TEXT | --transcript-file FILE) --consent own-voice|speaker-permission [--language NAME] [--gender female|male]`
-Creates a **voice profile** for models that can clone (Qwen3-TTS Base). The reference must be a PCM WAV of 2–60 s (5–15 s of clean,
+Creates a **voice profile** (`kind: clone`) for models that can clone (Qwen3-TTS Base). The reference must be a PCM WAV of 2–60 s (5–15 s of clean,
 single-speaker speech works best); the transcript is exactly what is said in it. `--consent` is required and stored verbatim with the
 profile:
 
@@ -187,6 +187,22 @@ The recording is **copied** into `<models>\voice-profiles\<voiceId>\reference.wa
 is recorded, never its path. Profiles are immutable (a second profile with the same name fails with `output_exists`). The voice id is
 derived from the name (`"Tom Narrator"` → `tom_narrator`) and appears in `voices list` of every cloning model with `kind: clone`.
 `synth` output and take records then carry `voiceKind: clone`.
+
+### `noorvox voices design --name NAME --description TEXT [--text SAMPLE] [--language NAME] [--seed N]`
+Makes a new voice with **Qwen3-TTS VoiceDesign** (`qwen3-tts-1.7b-voicedesign`): it speaks `--text` (default: a neutral storytelling
+sentence) in a voice matching `--description` ("a warm British woman in her fifties, calm audiobook narrator"), then keeps that sample as a
+voice profile of `kind: designed`, spoken by a Qwen Base model from then on (so it stays the same voice every time). No real person's
+voice is involved, so instead of a consent statement the profile records its provenance (model, description, and the statement
+"Synthetic voice designed by Qwen3-TTS VoiceDesign…"). `data`: `voiceId`, `name`, `kind`, `description`, `referenceDurationMs`, `seed`,
+`path`, `usableWith`. Each run designs a *new* voice; pass `--seed` to reproduce one.
+
+The VoiceDesign model can also be used directly with `synth --model qwen3-tts-1.7b-voicedesign --voice designed --style "<description>"`;
+there `--style` is required and *is* the voice.
+
+### `noorvox recordings list`
+The Voice lab library: `<recordings>\<id>.wav` + `<id>.json` (default `Documents\NoorVox\Recordings`, set with `storage set --recordings`).
+`data.recordings[]`: `id`, `name`, `transcript`, `notes`, `source` (`microphone`/`imported`), `durationMs`, `sampleRate`, `createdAt`, `path`.
+A recording can become a cloned voice with `voices clone --reference <path> --transcript … --consent …` (the user's consent, never the agent's).
 
 ### `noorvox voices remove-profile --voice ID`
 Deletes a voice profile (its reference copy and consent record). Takes and exports already made with it are not touched.

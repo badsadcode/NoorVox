@@ -146,8 +146,11 @@ public sealed class NarrationService(StorageContext storage, WorkerSupervisor su
             throw new NoorVoxException(caps.Speed ? ErrorCodes.InvalidArguments : ErrorCodes.Unsupported, ExitCode.InvalidArguments,
                 caps.Speed ? $"Speed must be between {caps.MinSpeed} and {caps.MaxSpeed} for {name}."
                     : $"{name} has no speed control. Leave speed at 1.0{(caps.Style ? " and ask for a pace in the style instead" : "")}.");
-        if (!string.IsNullOrWhiteSpace(style) && !caps.Style)
+        if (!string.IsNullOrWhiteSpace(style) && !caps.Style && !caps.Design)
             throw new NoorVoxException(ErrorCodes.Unsupported, ExitCode.InvalidArguments, $"{name} does not take style directions.");
+        if (caps.Design && string.IsNullOrWhiteSpace(style))
+            throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments,
+                $"{name} makes a voice from a description: describe it in the style (e.g. \"a warm British woman in her fifties, calm audiobook narrator\").");
         if (style is { Length: > 500 })
             throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "Keep style directions under 500 characters.");
         if (seed is not null && !caps.Seed)

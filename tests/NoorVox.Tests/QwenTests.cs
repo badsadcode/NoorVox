@@ -53,7 +53,7 @@ public class QwenTests : IDisposable
     {
         var catalog = ModelCatalog.LoadEmbedded();
         var qwen = catalog.Models.Where(m => m.Backend == "qwen3-tts").ToList();
-        Assert.Equal(4, qwen.Count);
+        Assert.Equal(5, qwen.Count); // CustomVoice and Base in 1.7B and 0.6B, plus 1.7B VoiceDesign
         foreach (var m in qwen)
         {
             Assert.Equal(EngineIds.QwenTts, m.Engine);

@@ -11,6 +11,7 @@
 | Projects | `Documents\NoorVox\Projects` | `<app>\data\Projects` | default parent for new projects (a project can live anywhere) |
 | Exports | `Documents\NoorVox\Exports` | `<app>\data\Exports` | quick-narration exports, support bundles |
 | Interface data | `%LOCALAPPDATA%\NoorVox\WebView2` | `<app>\data\WebView2` | WebView2 profile (set before the browser starts) |
+| Recordings | `Documents\NoorVox\Recordings` | `<app>\data\Recordings` | your Voice lab recordings (`<name>.wav` + `.json` with transcript and notes) |
 
 - **Every class is independently configurable** (Settings → Storage, first-run setup, or `noorvox storage set`). **C: is allowed.**
   Any drive works, and the exact resolved folder is always shown.
@@ -49,6 +50,9 @@ with default paths, or by another launcher that saw a different AppData. It only
   contain scripts, segment text, audio, takes or project files. Logs and paths can still contain folder names from your PC, so review a bundle before sharing it.
 - Logs (`<temp>\logs`) record lifecycle events, timings, character counts, voice ids and style directions. They don't record script text.
   `engine-<id>.log` holds pip's output from engine installs.
+- **Microphone:** only the studio's own page may use it (every other permission request is denied), only while you record in the Voice
+  lab, and Windows shows its microphone indicator meanwhile. Recordings are saved only when you press Save, as plain WAV files in your
+  Recordings folder; they are never uploaded and never deleted by NoorVox (Delete sends them to the Recycle Bin).
 - **Cloned voices** (voice profiles) hold a copy of the reference recording, its transcript, its sha256, the original file name (not the
   path), and the consent statement you confirmed, with a timestamp. They stay on this PC in `<models>\voice-profiles\`, are never
   uploaded, and are deleted with `noorvox voices remove-profile`. Only clone voices you own or have permission to use.

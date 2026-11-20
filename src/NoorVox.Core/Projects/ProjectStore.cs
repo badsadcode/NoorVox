@@ -404,7 +404,7 @@ public sealed partial class ProjectStore
         var voice = seg.VoiceId ?? speaker?.VoiceId ?? Project.Defaults.VoiceId ?? model.Manifest.DefaultVoice ?? "af_heart";
         var speed = seg.Speed ?? speaker?.Speed ?? Project.Defaults.Speed;
         // Style applies only where the model takes it; an empty segment style switches an inherited one off.
-        var style = model.Capabilities.Style ? seg.Style ?? speaker?.Style ?? Project.Defaults.Style : null;
+        var style = model.Capabilities.Style || model.Capabilities.Design ? seg.Style ?? speaker?.Style ?? Project.Defaults.Style : null;
         style = string.IsNullOrWhiteSpace(style) ? null : style.Trim();
         var spoken = (pron ?? Pronunciation()).Apply(seg.Text);
         var key = CacheKey(spoken, voice, speed, model, style);

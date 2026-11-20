@@ -1,6 +1,8 @@
 import { isHosted } from "./bridge";
 import { StateBadge } from "./components/Common";
-import { Box, Folder, Gear, Logo, Mic, Pulse } from "./components/Icons";
+import { Box, Folder, Gear, Logo, Mic, Pulse, Wave } from "./components/Icons";
+import { TitleBar } from "./components/TitleBar";
+import { VoiceLab } from "./pages/VoiceLab";
 import { Models } from "./pages/Models";
 import { Monitor } from "./pages/Monitor";
 import { Narrate } from "./pages/Narrate";
@@ -13,6 +15,7 @@ import { useStudio, type Page } from "./studio";
 const nav: { id: Page; label: string; icon: typeof Mic }[] = [
   { id: "projects", label: "Projects", icon: Folder },
   { id: "narrate", label: "Quick narration", icon: Mic },
+  { id: "voicelab", label: "Voice lab", icon: Wave },
   { id: "models", label: "Models & voices", icon: Box },
   { id: "monitor", label: "Monitor", icon: Pulse },
   { id: "settings", label: "Settings", icon: Gear },
@@ -22,7 +25,10 @@ export function App() {
   const { page, go, info, workers } = useStudio();
   const engine = workers.find((w) => w.workerId === "studio") ?? workers[0];
 
+  const current = nav.find((n) => n.id === page || (n.id === "projects" && page === "project"))?.label;
   return (
+    <div className="frame">
+    <TitleBar subtitle={current} />
     <div className="shell">
       <nav className="rail" aria-label="Main">
         <div className="brand">
@@ -45,6 +51,7 @@ export function App() {
         {page === "projects" && <Projects />}
         {page === "project" && <Project />}
         {page === "narrate" && <Narrate />}
+        {page === "voicelab" && <VoiceLab />}
         {page === "models" && <Models />}
         {page === "monitor" && <Monitor />}
         {page === "settings" && <Settings />}
@@ -63,6 +70,7 @@ export function App() {
         <span className="sep" />
         <span>NoorVox {info?.version ?? ""}{isHosted ? "" : " · browser preview (mock data)"}</span>
       </footer>
+    </div>
     </div>
   );
 }

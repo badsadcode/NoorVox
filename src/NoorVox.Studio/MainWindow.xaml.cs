@@ -15,6 +15,9 @@ public partial class MainWindow : Window
     public const string AppHost = "app.noorvox.local";
     public const string MediaHost = "media.noorvox.local";
     public const string TakesHost = "takes.noorvox.local";
+    /// <summary>Voice lab recordings (read-only, by id) and voice-profile reference clips (by voice id).</summary>
+    public const string RecordingsHost = "recordings.noorvox.local";
+    public const string ProfilesHost = "profiles.noorvox.local";
 
     readonly StudioOptions _options;
     /// <summary>Kill-on-close job shared by all studio-bound workers: if the studio dies, Windows ends them.</summary>
@@ -68,6 +71,8 @@ public partial class MainWindow : Window
         // after load are not applied to the already-loaded page, which broke take playback when a project was opened.)
         core.AddWebResourceRequestedFilter($"https://{MediaHost}/*", CoreWebView2WebResourceContext.All);
         core.AddWebResourceRequestedFilter($"https://{TakesHost}/*", CoreWebView2WebResourceContext.All);
+        core.AddWebResourceRequestedFilter($"https://{RecordingsHost}/*", CoreWebView2WebResourceContext.All);
+        core.AddWebResourceRequestedFilter($"https://{ProfilesHost}/*", CoreWebView2WebResourceContext.All);
         core.WebResourceRequested += ServeLocalAudio;
 
         bool dev = System.Diagnostics.Debugger.IsAttached || Environment.GetEnvironmentVariable("NOORVOX_DEVTOOLS") == "1";
@@ -77,6 +82,7 @@ public partial class MainWindow : Window
         core.Settings.AreBrowserAcceleratorKeysEnabled = dev; // no F5/Ctrl+R reloads mid-generation
         core.Settings.IsGeneralAutofillEnabled = false;
         core.Settings.IsPasswordAutosaveEnabled = false;
+        core.Settings.IsNonClientRegionSupportEnabled = true; // CSS app-region: drag = the custom title bar moves the window
 
         // The UI is local-only: block navigation anywhere else and never open new windows.
         core.NavigationStarting += (_, e) =>
@@ -88,7 +94,14 @@ public partial class MainWindow : Window
             }
         };
         core.NewWindowRequested += (_, e) => e.Handled = true;
-        core.PermissionRequested += (_, e) => e.State = CoreWebView2PermissionState.Deny;
+        // Only the app's own page may use the microphone (Voice lab recorder); everything else is denied.
+        core.PermissionRequested += (_, e) =>
+        {
+            bool mic = e.PermissionKind == CoreWebView2PermissionKind.Microphone && e.Uri.StartsWith($"https://{AppHost}/", StringComparison.OrdinalIgnoreCase);
+            e.State = mic ? CoreWebView2PermissionState.Allow : CoreWebView2PermissionState.Deny;
+            if (mic) e.SavesInProfile = false;
+        };
+        StateChanged += (_, _) => { FitMaximized(); _bridge?.Emit("window.state", new { maximized = WindowState == WindowState.Maximized }); };
 
         _bridge = new BridgeHost(core, Dispatcher);
         _api = new StudioApi(this, _job, _bridge, _workerExe);
@@ -124,8 +137,12 @@ public partial class MainWindow : Window
     void ServeLocalAudio(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
     {
         if (!Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var uri)) return;
+        var storage = StorageContext.Load();
         string? root = uri.Host.Equals(MediaHost, StringComparison.OrdinalIgnoreCase) ? _previewDir
-            : uri.Host.Equals(TakesHost, StringComparison.OrdinalIgnoreCase) ? _takesDir : null;
+            : uri.Host.Equals(TakesHost, StringComparison.OrdinalIgnoreCase) ? _takesDir
+            : uri.Host.Equals(RecordingsHost, StringComparison.OrdinalIgnoreCase) ? Path.GetFullPath(NoorVox.Core.Storage.RecordingStore.Dir(storage))
+            : uri.Host.Equals(ProfilesHost, StringComparison.OrdinalIgnoreCase) ? Path.GetFullPath(NoorVox.Core.Backends.VoiceProfiles.Root(storage.ModelsDir))
+            : null;
         string? file = null;
         if (root is not null)
         {
@@ -182,6 +199,16 @@ public partial class MainWindow : Window
         Web.Visibility = Visibility.Collapsed;
         Fallback.Visibility = Visibility.Visible;
         FallbackText.Text = message;
+    }
+
+    /// <summary>
+    /// With WindowChrome a maximized window extends past the screen by the resize border; pad it so the UI's own title bar
+    /// and its buttons stay fully visible.
+    /// </summary>
+    void FitMaximized()
+    {
+        // Resize frame + padded border (DIPs): exactly what Windows pushes off-screen on each side of a maximized window.
+        Root.Margin = WindowState == WindowState.Maximized ? SystemParameters.WindowResizeBorderThickness : new Thickness(0);
     }
 
     /// <summary>Light themes get a light title bar, dark themes a dark one.</summary>

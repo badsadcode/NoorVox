@@ -12,13 +12,13 @@ export function createChecks() {
   return { results, check };
 }
 
-export async function launchStudio(exe, { port, page = "narrate", env = {} }) {
+export async function launchStudio(exe, { port, page = "narrate", env = {}, browserArgs = "" }) {
   const studio = spawn(exe, ["--page", page], {
-    env: { ...process.env, ...env, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port} --remote-allow-origins=* --autoplay-policy=no-user-gesture-required` },
+    env: { ...process.env, ...env, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port} --remote-allow-origins=* --autoplay-policy=no-user-gesture-required ${browserArgs}`.trim() },
     stdio: "ignore",
   });
   let target;
-  for (let i = 0; i < 60 && !target; i++) {
+  for (let i = 0; i < 180 && !target; i++) { // up to 90 s: a fresh WebView2 profile can be slow on first start
     try {
       const list = await (await fetch(`http://127.0.0.1:${port}/json`)).json();
       target = list.find((x) => x.type === "page" && x.url.startsWith("https://app.noorvox.local/"));

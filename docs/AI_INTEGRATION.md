@@ -220,6 +220,10 @@ Rules for agents:
   speakers get their own `--style`. Takes record `style` and `seed`.
 - `gpu_out_of_memory` (exit 8): other apps hold the GPU. Ask the user to close them, or use a 0.6B model. Don't retry in a loop.
 
+Designed voices need no consent (no real person): `noorvox voices design --name "Margaret" --description "a warm British woman in her
+fifties, calm audiobook narrator"` makes a voice the Base model can speak (`--voice margaret`). Each run is a new voice; keep the seed.
+The user's own recordings are listed by `noorvox recordings list`; turning one into a clone still needs the user's consent statement.
+
 Kokoro on the GPU is a user setting (`noorvox gpu set --kokoro cuda`), not something to toggle per call.
 
 ## Reference

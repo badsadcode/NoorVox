@@ -23,9 +23,14 @@ const models = [
   { reference: "kokoro-82m@1.0", id: "kokoro-82m", displayName: "Kokoro 82M v1.0", capabilities: KOKORO_CAPS, isDefault: true, engineReady: true },
   { reference: "qwen3-tts-1.7b-customvoice@1.0", id: "qwen3-tts-1.7b-customvoice", displayName: "Qwen3-TTS 1.7B CustomVoice", capabilities: QWEN_CAPS, isDefault: false, engineReady: true },
   { reference: "qwen3-tts-1.7b-base@1.0", id: "qwen3-tts-1.7b-base", displayName: "Qwen3-TTS 1.7B Base (voice cloning)", capabilities: { ...QWEN_CAPS, style: false, cloning: true }, isDefault: false, engineReady: true },
+  { reference: "qwen3-tts-1.7b-voicedesign@1.0", id: "qwen3-tts-1.7b-voicedesign", displayName: "Qwen3-TTS 1.7B VoiceDesign (voice from a description)", capabilities: { ...QWEN_CAPS, style: false, design: true }, isDefault: false, engineReady: true },
 ];
 const consentStatements = { "own-voice": "This recording is my own voice.", "speaker-permission": "I have the speaker's permission to create and use a synthetic copy of their voice." };
 let kokoroProvider = "cpu";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let mockRecordings: any[] = [];
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockProfiles: any[] = [];
 
 let theme = "nocturne";
 let stopOnExit = true;
@@ -66,6 +71,28 @@ export async function mockCall(method: string, p: Record<string, any>): Promise<
       return p.model?.startsWith("qwen")
         ? { model: models[1].reference, modelName: models[1].displayName, defaultVoice: "aiden", capabilities: QWEN_CAPS, engineReady: true, voices: qwenVoices, models, consentStatements }
         : { model: models[0].reference, modelName: models[0].displayName, defaultVoice: "af_heart", capabilities: KOKORO_CAPS, engineReady: true, voices, models, consentStatements };
+    case "recordings.list":
+      return { dir: "X:\\Mock\\Recordings", recordings: mockRecordings };
+    case "recordings.save": {
+      const r = { id: `rec-${Date.now()}`, name: p.name || "Recording", transcript: p.transcript ?? "", notes: null, source: "microphone", sourceFileName: null,
+        durationMs: 8200, sampleRate: 48000, createdAt: new Date().toISOString(), mediaUrl: wav(8.2) };
+      mockRecordings.unshift(r);
+      return r;
+    }
+    case "recordings.delete":
+      mockRecordings = mockRecordings.filter((r) => r.id !== p.id);
+      return { id: p.id, recycled: true };
+    case "voices.profiles":
+      return { profiles: mockProfiles, usableWith: [{ reference: "qwen3-tts-1.7b-base@1.0", displayName: "Qwen3-TTS 1.7B Base (voice cloning)" }], consentStatements };
+    case "voices.cloneFromRecording": case "voices.saveTake": {
+      const prof = { voiceId: (p.name as string).toLowerCase().replace(/[^a-z0-9]+/g, "_"), name: p.name, kind: method === "voices.saveTake" ? "designed" : "clone",
+        language: "english", gender: "unknown", transcript: "…", referenceDurationMs: 8000,
+        consent: { basis: p.consent ?? "designed", statement: method === "voices.saveTake" ? "Synthetic voice designed by Qwen3-TTS VoiceDesign." : consentStatements[p.consent as keyof typeof consentStatements], confirmedAt: new Date().toISOString() },
+        description: method === "voices.saveTake" ? "A warm British woman in her fifties." : null, sourceModel: null, sourceVoice: null, sourceFileName: "rec.wav",
+        sourceRecordingId: p.recordingId ?? null, createdAt: new Date().toISOString(), mediaUrl: wav(4) };
+      mockProfiles.unshift(prof);
+      return { voiceId: prof.voiceId, name: prof.name, kind: prof.kind };
+    }
     case "voices.chooseReference":
       return { cancelled: false, token: "mock-token", fileName: "my-voice.wav", durationMs: 9400, sampleRate: 48000 };
     case "engines.list":

@@ -59,7 +59,12 @@ public static class ModelVoices
                 "built-in", b.Description);
         if (packId == InstalledModel.ProfilePackId && model.Profiles?.FirstOrDefault(p => p.VoiceId == voiceId) is { } p)
             return new VoiceInfo(p.VoiceId, p.Language, LanguageNames.GetValueOrDefault(p.Language, p.Language), p.Gender, p.Name, packId,
-                "clone", $"Cloned from {p.SourceFileName} ({p.ReferenceDurationMs / 1000.0:0.#} s). Consent: {p.Consent.Statement}");
+                p.Kind, p.Kind switch
+                {
+                    "designed" => $"Designed from: “{p.Description}”",
+                    "synthetic" => $"Saved from {p.SourceModel} voice {p.SourceVoice}.",
+                    _ => $"Cloned from {p.SourceFileName} ({p.ReferenceDurationMs / 1000.0:0.#} s). Consent: {p.Consent.Statement}",
+                });
         var info = KokoroVoiceNames.Describe(voiceId, packId);
         // Blended voices show the name the user gave them.
         return packId == VoiceBlender.CustomPackId && VoiceBlender.Recipe(model, voiceId) is { } r

@@ -1,7 +1,12 @@
-# NoorVox Studio — user guide (0.3.0)
+# NoorVox Studio — user guide (0.3.1)
 
 NoorVox Studio turns text into narration on your own PC. There is no account, cloud or paid credits, and after a one-time model
 download it works offline. All screenshots below are of the real application (captured by `tools/studio-smoke.mjs`).
+
+## The window
+
+NoorVox Studio draws its own title bar in the current theme: the logo, the title and the page you're on, plus minimize, maximize/restore
+and close. Drag it to move the window, double-click it to maximize, and drag it to a screen edge to snap; the window edges resize as usual.
 
 ## Installing and starting
 
@@ -96,6 +101,27 @@ Use a project for anything bigger than a quick line: a documentary episode, an a
   (text hash, voice, speed, model sha256, timings). The folder button shows the file in Explorer.
 
 Previews are kept in `<Temp>\studio\previews` and removed after 3 days. Export the takes you want to keep.
+
+## Voice lab
+
+![Voice lab](screenshots/25-voicelab-voice.png)
+
+- **Record:** pick or edit the script to read (it becomes the transcript), press **Record**, read it, press **Stop**, listen, name it and
+  **Save recording**. The meter shows your level; a red warning means the input clipped, so move back and record again. NoorVox records the
+  raw microphone (no noise suppression or auto gain), because processing would colour a cloned voice. If Windows blocks the microphone,
+  allow desktop apps in Windows Settings → Privacy → Microphone.
+- **My recordings:** your library, kept as WAV + JSON in the Recordings folder (Settings → Storage; the folder button opens it). Click a
+  name or transcript to edit it; the audio itself never changes. **Add a WAV file…** copies an existing recording in. **Delete** moves it
+  to the Recycle Bin.
+- **Make a voice…** turns a 2–60 s recording into a cloned voice (Qwen Base model). You confirm it's your voice or that you have the
+  speaker's permission. For acting, record the same character in several moods (calm, angry, whispering) and make a voice from each:
+  Qwen copies the delivery as well as the voice.
+- **Design a voice** (needs the Qwen3-TTS 1.7B VoiceDesign model): describe a voice ("a gravelly old sea captain, slow and amused"),
+  press **Design a sample**, and listen. Every sample is a new voice, so make a few and **Keep as voice…** the best one. Kept voices are
+  spoken by the Base model, so they sound the same every time.
+- **My voices:** every cloned, designed and saved voice, with its reference clip, where it came from, and **Remove**.
+
+Any take in Quick narration that isn't a cloned voice also has **Keep as voice…**.
 
 ## Models & voices
 

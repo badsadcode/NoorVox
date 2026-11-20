@@ -16,7 +16,7 @@ export const THEMES: { id: ThemeId; name: string; blurb: string; chips: string[]
 ];
 
 const KIND_LABEL: Record<StoragePath["kind"], string> = {
-  models: "Models & voices", cache: "Download cache", temp: "Temporary audio", projects: "Projects", exports: "Exports", webview: "Interface data",
+  models: "Models & voices", cache: "Download cache", temp: "Temporary audio", projects: "Projects", exports: "Exports", webview: "Interface data", recordings: "Recordings (Voice lab)",
 };
 
 export function StoragePaths({ kinds }: { kinds?: StoragePath["kind"][] }) {

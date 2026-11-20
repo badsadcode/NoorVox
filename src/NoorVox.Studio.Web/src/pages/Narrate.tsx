@@ -3,6 +3,7 @@ import { call, errorText, on } from "../bridge";
 import { Download, Folder, Mic, Pause, Play, Spinner, Upload, Wave } from "../components/Icons";
 import { Waveform } from "../components/Waveform";
 import { CloneDialog } from "../components/CloneDialog";
+import { KeepVoiceDialog } from "./VoiceLab";
 import { estimateSeconds, fmtClock, fmtDuration, wordCount } from "../format";
 import { useStudio } from "../studio";
 import type { GenerateResponse, Take, VoicesResponse } from "../types";
@@ -13,7 +14,7 @@ const SPEED_KEY = "noorvox.quick.speed";
 const MODEL_KEY = "noorvox.quick.model";
 const STYLE_KEY = "noorvox.quick.style";
 const LANG_KEY = "noorvox.quick.language";
-const KIND_GROUP: Record<string, string> = { clone: "My cloned voices", blend: "My blended voices" };
+const KIND_GROUP: Record<string, string> = { clone: "My cloned voices", designed: "My designed voices", synthetic: "My saved voices", blend: "My blended voices" };
 const cap = (s: string) => s ? s[0].toUpperCase() + s.slice(1) : s;
 const load = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
 const save = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* storage unavailable */ } };
@@ -35,6 +36,7 @@ export function Narrate() {
   const [seedLocked, setSeedLocked] = useState(false);
   const [seed, setSeed] = useState<number | null>(null);
   const [cloning, setCloning] = useState(false);
+  const [keeping, setKeeping] = useState<Take | null>(null);
   const [reloadVoices, setReloadVoices] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
   const [busySince, setBusySince] = useState<number | null>(null);
@@ -119,7 +121,7 @@ export function Narrate() {
       const r = await call<GenerateResponse>("narration.generate", {
         text: spoken, voice: voiceId, model: voices?.model,
         speed: caps?.speed ? speed : 1,
-        style: caps?.style && style.trim() ? style.trim() : null,
+        style: (caps?.style || caps?.design) && style.trim() ? style.trim() : null,
         seed: caps?.seed && seedLocked && seed != null ? seed : null,
         language: caps?.languages.length ? language : null,
       });
@@ -242,10 +244,11 @@ export function Narrate() {
                 value={speed} onChange={(e) => setSpeed(Number(e.target.value))} onDoubleClick={() => setSpeed(1)} />
             </>}
 
-            {caps?.style && <>
-              <label className="field" htmlFor="style" style={{ marginTop: 14 }}>Style directions</label>
+            {(caps?.style || caps?.design) && <>
+              <label className="field" htmlFor="style" style={{ marginTop: 14 }}>{caps.design ? "Voice description" : "Style directions"}</label>
               <textarea id="style" rows={2} maxLength={500} value={style} onChange={(e) => setStyle(e.target.value)}
-                placeholder="e.g. Calm, warm documentary narration with a hint of humour. Speak slowly." />
+                placeholder={caps.design ? "e.g. A gravelly old sea captain, slow, amused, with a soft Scottish accent."
+                  : "e.g. Calm, warm documentary narration with a hint of humour. Speak slowly."} />
             </>}
 
             {!!caps?.languages.length && <>
@@ -268,6 +271,7 @@ export function Narrate() {
             <p className="note" style={{ marginTop: 12 }}>
               {caps == null ? "Loading…"
                 : caps.speed && !caps.style ? "This model offers voice and speed. Pitch, emotion and style aren't controls in it, so NoorVox doesn't pretend they are."
+                : caps.design ? "VoiceDesign invents a voice from your description on every take. Keep one you like as a permanent voice (on its take, or in the Voice lab)."
                 : caps.style ? "Qwen follows written directions instead of sliders: describe the pace, mood and delivery. It has no speed control."
                 : caps.cloning ? "This model has no speed or style controls; the voice comes from the recording."
                 : "This model has no speed or style controls."}
@@ -295,6 +299,10 @@ export function Narrate() {
           </section>
         </aside>
       </div>
+      {keeping && (
+        <KeepVoiceDialog take={{ outputPath: keeping.result.outputPath, text: keeping.text }} onClose={() => setKeeping(null)}
+          onSaved={(name) => { setKeeping(null); notify(`Voice “${name}” kept. Pick it with the Qwen Base model, or see it in the Voice lab.`); setReloadVoices((n) => n + 1); }} />
+      )}
       {cloning && voices?.consentStatements && (
         <CloneDialog consent={voices.consentStatements} onClose={() => setCloning(false)}
           onCreated={(id) => { setCloning(false); setVoiceId(id); setReloadVoices((n) => n + 1); notify("Voice created. It's ready to use."); }} />
@@ -329,6 +337,9 @@ export function Narrate() {
               </div>
             </div>
             <div className="row" style={{ flexWrap: "nowrap" }}>
+              {t.result.voiceKind !== "clone" && (
+                <button className="btn small" onClick={() => setKeeping(t)} title="Keep this take's voice as a permanent voice (spoken by the Qwen Base model)">Keep as voice…</button>
+              )}
               <button className="btn small primary" onClick={() => exportTake(t)}><Download size={15} /> Export…</button>
               <button className="btn small" onClick={() => reveal(t.exportedPath ?? t.result.outputPath)} aria-label="Show file in Explorer"><Folder size={15} /></button>
             </div>

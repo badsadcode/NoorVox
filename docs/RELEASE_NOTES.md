@@ -1,5 +1,20 @@
 # NoorVox release notes
 
+## 0.3.1 — Voice lab, VoiceDesign and a new title bar
+
+- **Voice lab** page: record your voice in the studio (level meter, clipping warning, ready-made scripts to read), keep a library of
+  performances as WAV + JSON in a **Recordings** folder you choose (Settings → Storage), play, rename, edit transcripts, add existing WAVs,
+  and turn any recording into a cloned voice (consent required). Delete moves recordings to the Recycle Bin. Different moods make
+  different voices: Qwen clones the delivery as well as the timbre.
+- **VoiceDesign** (Qwen3-TTS 1.7B VoiceDesign, Apache-2.0): describe a voice in words, generate samples, and **keep** the one you like as a
+  permanent voice spoken by the Base model. `noorvox voices design` does the same from the CLI.
+- **Keep as voice…** on any non-cloned take in Quick narration (designed or built-in voices become `designed`/`synthetic` profiles with
+  their provenance; takes of cloned voices can't be re-saved, so a real person's voice never skips consent).
+- **Custom title bar** in the app's theme: logo, title and current page, minimize / maximize-restore / close. Windows still handles
+  dragging, double-click maximize, snapping and edge resizing.
+- Qwen loading shows its stage and a clock (Quick narration, Voice lab and Monitor).
+- Measured here: VoiceDesign load + first sample 3 min from HDD; designed voice → Base model take verified.
+
 ## 0.3.0 — Qwen3-TTS and the GPU
 
 - **Qwen3-TTS voices** (Apache-2.0) as a second engine, on NVIDIA GPUs: 1.7B CustomVoice (9 speakers that follow written **style

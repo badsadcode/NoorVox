@@ -14,6 +14,8 @@ public sealed record ModelCapabilities
     public bool Style { get; init; }
     /// <summary>Speaks in the voice of a reference recording (a voice profile).</summary>
     public bool Cloning { get; init; }
+    /// <summary>Makes a new voice from a written description (Qwen VoiceDesign). The description goes in the style field and is required.</summary>
+    public bool Design { get; init; }
     /// <summary>Kokoro voice blending (weighted average of style vectors).</summary>
     public bool Blending { get; init; }
     /// <summary>A seed makes a take reproducible on the same GPU and software.</summary>

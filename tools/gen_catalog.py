@@ -49,7 +49,7 @@ cat = {
     ],
     "files": [{"path": "kokoro.onnx", "size": 325508342, "sha256": "0cfd5e79aab70a3d8c1a57dc639835110ddb32c9f5ff4fdd1f4db202ea43bb05"}],
     "capabilities": {"speed": True, "minSpeed": 0.5, "maxSpeed": 2.0, "style": False, "cloning": False, "blending": True,
-                     "seed": False, "requiresGpu": False, "languages": []},
+                     "seed": False, "requiresGpu": False, "languages": [], "design": False},
     "family": "kokoro",
   }],
   "voicePacks": [{
@@ -84,7 +84,10 @@ QWEN = [  # name, pinned revision, kind, measured peak VRAM rounded up to GB (No
     ("1.7B-Base", "fd4b254389122332181a7c3db7f27e918eec64e3", "clone", 6),
     ("0.6B-CustomVoice", "85e237c12c027371202489a0ec509ded67b5e4b5", "custom", None),
     ("0.6B-Base", "5d83992436eae1d760afd27aff78a71d676296fc", "clone", None),
+    ("1.7B-VoiceDesign", "5ecdb67327fd37bb2e042aab12ff7391903235d3", "design", None),
 ]
+KIND_ID = {"custom": "customvoice", "clone": "base", "design": "voicedesign"}
+KIND_NAME = {"custom": "CustomVoice", "clone": "Base (voice cloning)", "design": "VoiceDesign (voice from a description)"}
 
 
 def qwen_model(name, rev, kind, vram):
@@ -101,20 +104,26 @@ def qwen_model(name, rev, kind, vram):
     size = name.split("-")[0]
     big = size == "1.7B"
     caps = {"speed": False, "minSpeed": 1.0, "maxSpeed": 1.0, "style": kind == "custom" and big, "cloning": kind == "clone",
-            "blending": False, "seed": True, "requiresGpu": True, "languages": QWEN_LANGS}
+            "design": kind == "design", "blending": False, "seed": True, "requiresGpu": True, "languages": QWEN_LANGS}
     if kind == "custom":
         desc = f"Qwen3-TTS {size}: 9 built-in speakers" + (
             " that follow written style directions (\"calm, warm, a hint of humour\")." if big else ".") + " Needs an NVIDIA GPU. 10 languages."
+    elif kind == "design":
+        desc = (f"Qwen3-TTS {size}: creates a new voice from a written description (\"a warm British woman in her fifties, calm audiobook narrator\"). "
+                "Save a voice you like and the Base model speaks with it. Needs an NVIDIA GPU. 10 languages.")
     else:
         desc = f"Qwen3-TTS {size}: speaks in a voice cloned from a short recording (with consent). Needs an NVIDIA GPU. 10 languages."
     m = {
-        "id": f"qwen3-tts-{size.lower()}-{'customvoice' if kind == 'custom' else 'base'}", "version": "1.0",
-        "displayName": f"Qwen3-TTS {size} {'CustomVoice' if kind == 'custom' else 'Base (voice cloning)'}",
+        "id": f"qwen3-tts-{size.lower()}-{KIND_ID[kind]}", "version": "1.0",
+        "displayName": f"Qwen3-TTS {size} {KIND_NAME[kind]}",
         "description": desc, "backend": "qwen3-tts", "recommended": False,
         "license": "Apache-2.0", "licenseUrl": f"https://huggingface.co/{repo}", "source": f"https://huggingface.co/{repo}/tree/{rev}",
-        "defaultVoice": "aiden" if kind == "custom" else "", "sampleRate": 24000, "defaultVoicePacks": [],
+        "defaultVoice": {"custom": "aiden", "design": "designed"}.get(kind, ""), "sampleRate": 24000, "defaultVoicePacks": [],
         "downloads": downloads, "files": files, "capabilities": caps, "engine": "qwen-tts", "family": "qwen3-tts", "minVramGb": vram,
     }
+    if kind == "design":  # one pseudo-voice: the description in the style field defines it on every call
+        m["builtInVoices"] = [{"id": "designed", "displayName": "Designed voice", "gender": "unknown", "language": "auto",
+                               "description": "A new voice made from your written description. Save one you like as a permanent voice."}]
     if kind == "custom":
         m["builtInVoices"] = [{"id": i, "displayName": n, "gender": g, "language": l, "description": t} for i, n, g, l, t in QWEN_SPEAKERS]
     print(m["id"], len(files), "files", sum(f["size"] for f in files), "bytes", file=sys.stderr)

@@ -69,6 +69,7 @@ public sealed class StorageContext
             StorageKind.Projects => Settings.Paths.Projects,
             StorageKind.Exports => Settings.Paths.Exports,
             StorageKind.WebView => Settings.Paths.WebView,
+            StorageKind.Recordings => Settings.Paths.Recordings,
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };
         if (!string.IsNullOrWhiteSpace(configured))
@@ -87,7 +88,7 @@ public sealed class StorageContext
         if (Mode != HomeMode.Default) return Path.Combine(Home, name);
         return kind switch
         {
-            StorageKind.Projects or StorageKind.Exports =>
+            StorageKind.Projects or StorageKind.Exports or StorageKind.Recordings =>
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "NoorVox", name),
             _ => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NoorVox", name),
         };
@@ -112,6 +113,7 @@ public sealed class StorageContext
             case StorageKind.Projects: p.Projects = value; break;
             case StorageKind.Exports: p.Exports = value; break;
             case StorageKind.WebView: p.WebView = value; break;
+            case StorageKind.Recordings: p.Recordings = value; break;
         }
         Save();
         return Resolve(kind);

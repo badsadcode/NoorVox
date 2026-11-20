@@ -42,6 +42,23 @@ public sealed class StudioApi(MainWindow window, JobObject job, BridgeHost bridg
         "voices.chooseReference" => await ChooseReference(),
         "voices.clone" => VoiceClone(Arg<CloneArgs>(p)),
         "voices.removeProfile" => VoiceRemoveProfile(Arg<IdArgs>(p)),
+        "voices.profiles" => VoiceProfilesList(),
+        "voices.cloneFromRecording" => VoiceCloneFromRecording(Arg<CloneRecordingArgs>(p)),
+        "voices.saveTake" => VoiceSaveTake(Arg<SaveTakeArgs>(p)),
+        "recordings.list" => RecordingsList(),
+        "recordings.save" => RecordingsSave(Arg<SaveRecordingArgs>(p)),
+        "recordings.import" => await RecordingsImport(),
+        "recordings.update" => RecordingsUpdate(Arg<UpdateRecordingArgs>(p)),
+        "recordings.delete" => RecordingsDelete(Arg<IdArgs>(p)),
+        "recordings.reveal" => RecordingsReveal(OptArg<IdArgs>(p)?.Id),
+        "window.minimize" => OnUi<object>(() => { window.WindowState = WindowState.Minimized; return new { }; }),
+        "window.toggleMaximize" => OnUi<object>(() =>
+        {
+            window.WindowState = window.WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+            return new { maximized = window.WindowState == WindowState.Maximized };
+        }),
+        "window.close" => OnUi<object>(() => { window.Dispatcher.BeginInvoke(window.Close); return new { }; }), // the quit policy still applies
+        "window.state" => OnUi<object>(() => new { maximized = window.WindowState == WindowState.Maximized }),
         "engines.list" => new { engines = new EngineRegistry(S()).List(ModelCatalog.LoadEmbedded()) },
         "engines.install" => await EngineInstall(Arg<IdArgs>(p), ct),
         "voices.installPack" => await VoicePackInstall(Arg<IdArgs>(p), ct),
@@ -70,6 +87,11 @@ public sealed class StudioApi(MainWindow window, JobObject job, BridgeHost bridg
     public sealed record ForceArgs(bool Force);
     public sealed record GenerateArgs(string Text, string Voice, double Speed, string? Model, string? Style, long? Seed, string? Language);
     public sealed record ModelArgs(string? Model);
+    public sealed record CloneRecordingArgs(string RecordingId, string Name, string Consent, string? Language, string? Gender);
+    /// <param name="Transcript">The text that take spoke (what the page sent to generate it).</param>
+    public sealed record SaveTakeArgs(string PreviewPath, string Name, string Transcript, string? Gender);
+    public sealed record SaveRecordingArgs(string Name, string? Transcript, string WavBase64);
+    public sealed record UpdateRecordingArgs(string Id, string? Name, string? Transcript, string? Notes);
     public sealed record CloneArgs(string Name, string ReferenceToken, string Transcript, string Consent, string? Language, string? Gender);
     public sealed record ExportArgs(string PreviewPath, string? SuggestedName);
     public sealed record PathArgs(string Path);
@@ -400,6 +422,106 @@ public sealed class StudioApi(MainWindow window, JobObject job, BridgeHost bridg
             if (st.LoadedModel is not null && st.Backend == "kokoro-onnx") await sup.RecycleAsync(StudioWorker, CancellationToken.None);
         }
         catch (Exception) { /* the next generation loads with the new provider anyway */ }
+    }
+
+    // ------------------------------------------------------------ Voice lab: recordings and voice profiles
+
+    static object RecordingView(RecordingInfo r) => new
+    {
+        r.Id, r.Name, r.Transcript, r.Notes, r.Source, r.SourceFileName, r.DurationMs, r.SampleRate, r.CreatedAt,
+        mediaUrl = $"https://{MainWindow.RecordingsHost}/{Uri.EscapeDataString(r.Id)}.wav",
+    };
+
+    static object RecordingsList()
+    {
+        var s = S();
+        return new { dir = RecordingStore.Dir(s), recordings = RecordingStore.List(s).Select(RecordingView) };
+    }
+
+    static object RecordingsSave(SaveRecordingArgs a)
+    {
+        byte[] wav;
+        try { wav = Convert.FromBase64String(a.WavBase64); }
+        catch (FormatException) { throw new NoorVoxException(ErrorCodes.InvalidInput, ExitCode.InvalidInput, "The recording data is damaged."); }
+        return RecordingView(RecordingStore.Save(S(), wav, a.Name, a.Transcript, "microphone"));
+    }
+
+    async Task<object?> RecordingsImport()
+    {
+        var path = await Application.Current.Dispatcher.InvokeAsync(() =>
+        {
+            var dlg = new Microsoft.Win32.OpenFileDialog { Title = "Add a recording to the Voice lab (WAV)", Filter = "WAV audio (*.wav)|*.wav", CheckFileExists = true };
+            return dlg.ShowDialog(window) == true ? dlg.FileName : null;
+        });
+        if (path is null) return new { cancelled = true };
+        return new { cancelled = false, recording = RecordingView(RecordingStore.Import(S(), path, null, null)) };
+    }
+
+    static object RecordingsUpdate(UpdateRecordingArgs a) => RecordingView(RecordingStore.Update(S(), a.Id, a.Name, a.Transcript, a.Notes));
+
+    static object RecordingsDelete(IdArgs a)
+    {
+        RecordingStore.Delete(S(), a.Id);
+        return new { id = a.Id, recycled = true };
+    }
+
+    static object RecordingsReveal(string? id)
+    {
+        var s = S();
+        var dir = RecordingStore.Dir(s);
+        Directory.CreateDirectory(dir);
+        var args = id is null ? $"\"{dir}\"" : $"/select,\"{RecordingStore.Find(s, id).WavPath}\"";
+        Process.Start(new ProcessStartInfo("explorer.exe", args) { UseShellExecute = true });
+        return new { dir };
+    }
+
+    static object VoiceProfilesList()
+    {
+        var s = S();
+        var cloners = new ModelRegistry(s).List().Where(m => m.Capabilities.Cloning).Select(m => new { m.Reference, m.Manifest.DisplayName }).ToList();
+        return new
+        {
+            profiles = VoiceProfiles.ReadAll(s.ModelsDir).Select(p => new
+            {
+                p.VoiceId, p.Name, p.Kind, p.Language, p.Gender, p.Transcript, p.ReferenceDurationMs, p.Consent, p.Description,
+                p.SourceModel, p.SourceVoice, p.SourceFileName, p.SourceRecordingId, p.CreatedAt,
+                mediaUrl = $"https://{MainWindow.ProfilesHost}/{Uri.EscapeDataString(p.VoiceId)}/{Uri.EscapeDataString(p.ReferenceFile)}",
+            }),
+            usableWith = cloners,
+            consentStatements = VoiceProfiles.ConsentStatements,
+        };
+    }
+
+    static object VoiceCloneFromRecording(CloneRecordingArgs a)
+    {
+        var s = S();
+        var r = RecordingStore.Find(s, a.RecordingId);
+        if (string.IsNullOrWhiteSpace(r.Transcript))
+            throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "Add what is said in the recording (its transcript) first.");
+        var p = VoiceProfiles.Create(s.ModelsDir, new CreateProfileRequest(a.Name, r.WavPath, r.Transcript, a.Consent,
+            (a.Language ?? "auto").ToLowerInvariant(), (a.Gender ?? "unknown").ToLowerInvariant(), r.Id));
+        return new { p.VoiceId, p.Name, p.Kind };
+    }
+
+    /// <summary>
+    /// Keeps a take as a permanent voice: a VoiceDesign take becomes a <c>designed</c> voice, a built-in/pack voice take a
+    /// <c>synthetic</c> one. Takes of cloned voices can't be re-saved (they'd launder a real person's voice past consent).
+    /// </summary>
+    static object VoiceSaveTake(SaveTakeArgs a)
+    {
+        var s = S();
+        var preview = RequireInside(a.PreviewPath, MainWindow.PreviewDir(s));
+        var manifestPath = Path.ChangeExtension(preview, ".noorvox.json");
+        if (!File.Exists(manifestPath)) throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "That take has no provenance record.");
+        var m = Json.ReadFile<NarrationResult>(manifestPath);
+        if (m.VoiceKind == "clone")
+            throw new NoorVoxException(ErrorCodes.Unsupported, ExitCode.InvalidArguments,
+                "Takes of a cloned voice can't become new voices. Clone from the original recording instead.");
+        var model = new ModelRegistry(s).Find($"{m.Model.Id}@{m.Model.Version}");
+        bool designed = model?.Capabilities.Design == true;
+        var p = VoiceProfiles.CreateGenerated(s.ModelsDir, new GeneratedProfileRequest(a.Name, preview, a.Transcript, designed ? "designed" : "synthetic",
+            $"{m.Model.Id}@{m.Model.Version}", m.Voice, designed ? m.Style : null, m.Language ?? "auto", (a.Gender ?? "unknown").ToLowerInvariant()));
+        return new { p.VoiceId, p.Name, p.Kind };
     }
 
     // ------------------------------------------------------------ workers

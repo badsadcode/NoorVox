@@ -7,7 +7,7 @@ Anything libraries print is redirected to stderr, which the worker copies into i
 EOF on stdin means the worker is gone: exit at once (the worker's Job Object is the second safety net).
 
 Requests:  {"id": "...", "op": "load", "modelDir": "...", "warmup": true}
-           {"id": "...", "op": "synth", "mode": "custom"|"clone", "text": "...", "language": "Auto"|"English"|...,
+           {"id": "...", "op": "synth", "mode": "custom"|"clone"|"design", "text": "...", "language": "Auto"|"English"|...,
             "speaker": "aiden", "instruct": "...", "refAudio": "...", "refText": "...", "seed": 123, "out": "x.wav"}
 Responses: {"id": "...", "ok": true, ...} | {"id": "...", "ok": false, "error": {"code": "...", "message": "..."}}
 Events (no id, any time before a reply): {"event": "progress", "stage": "reading" | "warmup"}
@@ -145,6 +145,8 @@ class Engine:
             if req["mode"] == "custom":
                 wavs, sr = self.model.generate_custom_voice(
                     text=piece, speaker=req["speaker"], language=language, instruct=req.get("instruct") or None)
+            elif req["mode"] == "design":
+                wavs, sr = self.model.generate_voice_design(text=piece, instruct=req["instruct"], language=language)
             elif req["mode"] == "clone":
                 wavs, sr = self.model.generate_voice_clone(
                     text=piece, language=language, ref_audio=req["refAudio"], ref_text=req["refText"])

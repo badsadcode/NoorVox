@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { call, errorText, on } from "./bridge";
 import type { AppInfo, Take, ThemeId, WorkerStatus, WorkersResponse } from "./types";
 
-export type Page = "projects" | "project" | "narrate" | "models" | "monitor" | "settings" | "setup";
+export type Page = "projects" | "project" | "narrate" | "voicelab" | "models" | "monitor" | "settings" | "setup";
 
 interface StudioState {
   info: AppInfo | null;
@@ -28,7 +28,7 @@ export const useStudio = () => useContext(Ctx);
 
 const pageFromHash = (): Page | null => {
   const h = location.hash.replace(/^#\/?/, "");
-  return (["projects", "project", "narrate", "models", "monitor", "settings", "setup"] as Page[]).includes(h as Page) ? (h as Page) : null;
+  return (["projects", "project", "narrate", "voicelab", "models", "monitor", "settings", "setup"] as Page[]).includes(h as Page) ? (h as Page) : null;
 };
 
 export function StudioProvider({ children }: { children: ReactNode }) {

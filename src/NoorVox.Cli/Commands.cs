@@ -22,6 +22,7 @@ public static class Commands
             : Path.Combine(AppContext.BaseDirectory, "NoorVox.Worker.exe");
 
     static WorkerSupervisor Supervisor(StorageContext s) => new(s, WorkerExe(), "cli");
+    internal static string WorkerExePath() => WorkerExe();
 
     internal static IProgress<InstallProgress> InstallProgressReporter(CommandContext ctx) => new SyncProgress<InstallProgress>(p =>
     {

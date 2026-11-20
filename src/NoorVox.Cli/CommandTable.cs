@@ -19,8 +19,8 @@ public static class CommandTable
 
         new(["storage", "show"], "Show configured and resolved storage paths.", "noorvox storage show [--json]", [], Commands.StorageShow),
         new(["storage", "set"], "Set storage paths (validated writable). Use 'default' to reset one.",
-            "noorvox storage set [--models DIR] [--cache DIR] [--temp DIR] [--projects DIR] [--exports DIR] [--webview DIR] [--json]",
-            ["models", "cache", "temp", "projects", "exports", "webview"], Commands.StorageSet),
+            "noorvox storage set [--models DIR] [--cache DIR] [--temp DIR] [--projects DIR] [--exports DIR] [--webview DIR] [--recordings DIR] [--json]",
+            ["models", "cache", "temp", "projects", "exports", "webview", "recordings"], Commands.StorageSet),
 
         new(["storage", "audit"], "Sizes, free space and drives of every NoorVox location, plus NoorVox data found where the settings don't point (stray copies).",
             "noorvox storage audit [--json]", [], Commands.StorageAudit),
@@ -53,6 +53,10 @@ public static class CommandTable
         new(["voices", "clone"], "Create a cloned voice profile from a 2-60 s WAV and its transcript. Requires --consent own-voice|speaker-permission.",
             "noorvox voices clone --name NAME --reference FILE.wav (--transcript TEXT | --transcript-file FILE) --consent own-voice|speaker-permission [--language auto|english|…] [--gender female|male] [--json]",
             ["name", "reference", "transcript", "transcript-file", "consent", "language", "gender"], EngineCommands.Clone),
+        new(["voices", "design"], "Create a new voice from a written description (Qwen3-TTS VoiceDesign) and keep it as a voice profile spoken by the Base model.",
+            "noorvox voices design --name NAME --description TEXT [--text SAMPLE] [--language NAME] [--seed N] [--json]",
+            ["name", "description", "text", "language", "seed"], EngineCommands.Design),
+        new(["recordings", "list"], "List the Voice lab recordings (WAV + transcript) in the recordings folder.", "noorvox recordings list [--json]", [], EngineCommands.RecordingsList),
         new(["voices", "remove-profile"], "Delete a cloned voice profile (its reference copy and consent record). Takes made with it stay.",
             "noorvox voices remove-profile --voice ID [--json]", ["voice"], EngineCommands.ProfileRemove),
         new(["voices", "install"], "Download and install a voice pack into an installed model.",

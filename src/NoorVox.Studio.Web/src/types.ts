@@ -13,7 +13,7 @@ export interface AppInfo {
 }
 
 export interface StoragePath {
-  kind: "models" | "cache" | "temp" | "projects" | "exports" | "webview";
+  kind: "models" | "cache" | "temp" | "projects" | "exports" | "webview" | "recordings";
   path: string;
   source: string;
   drive: string;
@@ -23,11 +23,27 @@ export interface StoragePath {
 
 /** Mirrors Core/Models/Capabilities.cs: the UI shows only controls that are true here. */
 export interface ModelCapabilities {
-  speed: boolean; minSpeed: number; maxSpeed: number; style: boolean; cloning: boolean; blending: boolean; seed: boolean;
+  speed: boolean; minSpeed: number; maxSpeed: number; style: boolean; cloning: boolean; design?: boolean; blending: boolean; seed: boolean;
   requiresGpu: boolean; languages: string[];
 }
 
-export type VoiceKind = "pack" | "blend" | "built-in" | "clone";
+/** clone = a real person's recording (with consent); designed = Qwen VoiceDesign; synthetic = saved from a built-in voice's take. */
+export type VoiceKind = "pack" | "blend" | "built-in" | "clone" | "designed" | "synthetic";
+
+export interface Recording {
+  id: string; name: string; transcript: string; notes: string | null; source: "microphone" | "imported"; sourceFileName: string | null;
+  durationMs: number; sampleRate: number; createdAt: string; mediaUrl: string;
+}
+
+export interface VoiceProfileView {
+  voiceId: string; name: string; kind: "clone" | "designed" | "synthetic"; language: string; gender: string; transcript: string;
+  referenceDurationMs: number; consent: { basis: string; statement: string; confirmedAt: string }; description: string | null;
+  sourceModel: string | null; sourceVoice: string | null; sourceFileName: string; sourceRecordingId: string | null; createdAt: string; mediaUrl: string;
+}
+
+export interface ProfilesResponse {
+  profiles: VoiceProfileView[]; usableWith: { reference: string; displayName: string }[]; consentStatements: Record<string, string>;
+}
 
 export interface Voice {
   id: string;
