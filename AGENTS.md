@@ -11,6 +11,12 @@ $env:NOORVOX_TEST_MODELS_DIR = "E:\AI\NoorVox\Models"   # optional: enables real
 dotnet test tests\NoorVox.Tests
 ```
 
+Studio UI: `npm run dev` in `src/NoorVox.Studio.Web` (browser + mock bridge). Real end-to-end check (opens a window, needs an installed model):
+
+```powershell
+node tools\studio-smoke.mjs src\NoorVox.Studio\bin\Debug\net10.0-windows\win-x64\NoorVoxStudio.exe docs\screenshots
+```
+
 Tests use isolated temp homes (`NOORVOX_HOME`) and never touch the user's settings or workers.
 
 ## Rules
@@ -25,3 +31,5 @@ Tests use isolated temp homes (`NOORVOX_HOME`) and never touch the user's settin
    `NoorVoxInfo.SchemaVersion` for breaking JSON changes.
 8. **Catalog changes:** regenerate `src/NoorVox.Core/Models/catalog.json` with `tools/gen_catalog.py`. Every file needs a sha256 and a license.
 9. Model weights, voices and generated audio are never committed (`.gitignore`).
+10. **Studio bridge:** every new UI capability is an explicit method in `StudioApi` with validated parameters. Never expose raw paths,
+    process launching or arbitrary URLs to JavaScript; keep disk and process work in C#. Keep `src/NoorVox.Studio.Web/src/types.ts` in sync.

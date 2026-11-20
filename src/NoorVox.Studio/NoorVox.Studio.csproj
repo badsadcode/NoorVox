@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- NoorVox Studio: WPF shell hosting the React UI in WebView2. All disk/process work stays in C# (spec §9.4). -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>NoorVoxStudio</AssemblyName>
+    <RootNamespace>NoorVox.Studio</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <WebDir>$(MSBuildProjectDirectory)\..\NoorVox.Studio.Web</WebDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\NoorVox.Core\NoorVox.Core.csproj" />
+    <!-- Referenced so NoorVox.Worker.exe is copied next to the studio; the studio never loads inference code. -->
+    <ProjectReference Include="..\NoorVox.Worker\NoorVox.Worker.csproj" />
+  </ItemGroup>
+
+  <!-- Build the React UI (Vite) into wwwroot before compiling. Skip with -p:SkipWebBuild=true. -->
+  <ItemGroup>
+    <WebSources Include="$(WebDir)\src\**\*;$(WebDir)\index.html;$(WebDir)\package.json;$(WebDir)\vite.config.ts;$(WebDir)\tsconfig.json" />
+  </ItemGroup>
+  <Target Name="NoorVoxNpmInstall" BeforeTargets="NoorVoxBuildWeb" Condition="'$(SkipWebBuild)' != 'true' And !Exists('$(WebDir)\node_modules')">
+    <Exec Command="npm ci --no-audit --no-fund" WorkingDirectory="$(WebDir)" />
+  </Target>
+  <Target Name="NoorVoxBuildWeb" BeforeTargets="BeforeBuild" Inputs="@(WebSources)" Outputs="$(MSBuildProjectDirectory)\wwwroot\index.html" Condition="'$(SkipWebBuild)' != 'true'">
+    <Exec Command="npm run build" WorkingDirectory="$(WebDir)" />
+  </Target>
+  <Target Name="NoorVoxIncludeWeb" AfterTargets="NoorVoxBuildWeb" BeforeTargets="AssignTargetPaths">
+    <ItemGroup>
+      <Content Include="wwwroot\**\*" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="NoorVoxRemoveBundledVoices" AfterTargets="CopyContent">
+    <RemoveDir Directories="$(OutputPath)voices" />
+  </Target>
+</Project>

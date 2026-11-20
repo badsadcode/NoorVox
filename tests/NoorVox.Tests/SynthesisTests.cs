@@ -64,6 +64,31 @@ public class SynthesisTests
     }
 
     [Fact]
+    public async Task Studio_policy_keeps_one_warm_dedicated_engine()
+    {
+        var (home, s, _) = Setup();
+        using var _ = home;
+        using var job = new JobObject();
+        using var sup = new WorkerSupervisor(s, TestPaths.WorkerExe, "studio", job);
+        var svc = new NoorVox.Core.Narration.NarrationService(s, sup);
+        NoorVox.Core.Narration.NarrationRequest Req(string name) => new()
+        {
+            Text = "Hello from the studio.", VoiceId = "af_heart", OutputPath = Path.Combine(home.Root, name), WriteManifest = true,
+            WorkerId = "studio", DedicatedWorker = true, DedicatedBoundToLauncher = true,
+        };
+
+        var first = await svc.SynthesizeAsync(Req("a.wav"), null, CancellationToken.None);
+        var second = await svc.SynthesizeAsync(Req("b.wav"), null, CancellationToken.None);
+
+        Assert.True(first.Worker.StartedForRequest);
+        Assert.True(second.Worker.Reused);
+        Assert.False(second.Worker.StoppedAfter);
+        Assert.Equal("ready", second.Worker.StateAfter);
+        Assert.True(File.Exists(second.ManifestPath));
+        Assert.Equal(WavInfo.Read(second.OutputPath).DurationMs, second.DurationMs);
+    }
+
+    [Fact]
     public async Task Unknown_voice_is_a_clean_error_and_worker_stays_ready()
     {
         var (home, s, model) = Setup();

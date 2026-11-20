@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.1.0-dev — Phase 2: NoorVox Studio (2026-11-20)
+
+### Implemented and tested
+- `NoorVoxStudio.exe`: WPF + WebView2 shell with a locked-down, local-only React/TypeScript UI and a typed, allow-listed bridge.
+- First-run setup: storage choices before any download, then a one-click verified voice install.
+- Quick Narration: script editor with draft autosave and text import; voice picker with audition; speed; Generate (Ctrl+Enter);
+  session takes with waveform playback and seek, measured durations, Export (WAV + provenance JSON) and Reveal.
+- Models & voices: installed models (license, source, sha256, size), voice packs, install/update with progress, verify.
+- Runtime monitor: live state (icon + word), PID, model, memory, CPU %, provider, jobs and current work; Start, Unload (recycle),
+  Stop, Force stop (confirmed), Stop all. GPU is reported as unavailable, never as fake numbers.
+- Settings: storage paths (change/open/reset), six themes, stop-on-exit policy, idle timeout, default voice.
+- Quit policy: studio engines stop on exit by default (a Job Object guarantees it even on a crash); warns when keeping them.
+- Shared `NarrationService` in Core (CLI `synth` now uses it); `WorkerSupervisor` accepts a host-owned shared Job Object.
+- `tools/studio-smoke.mjs`: scripted end-to-end test of the real studio (10 checks); screenshots in docs/screenshots.
+- 29 xUnit tests (+2: shared job lifetime, studio dedicated-engine policy).
+
+### Fixed during Phase 2 testing
+- A crash on close when no workers were running (`Close()` called inside the Closing event).
+- Session takes were lost when switching pages; voice and speed were not remembered.
+- The waveform didn't follow theme changes; generated audio didn't autoplay inside WebView2.
+
 ## 0.1.0-dev — Phase 1: headless core (2026-11-20)
 
 ### Implemented and tested
@@ -14,7 +35,6 @@
 - Docs: CLI reference, AI integration cookbook, architecture, ADR-0001, AGENTS.md, a runnable example.
 
 ### Planned (not implemented)
-- Phase 2: NoorVox Studio (WPF + WebView2 + React): Quick Narration, model/worker monitor, storage setup, themes.
 - Phase 3: projects (documentary/audiobook/dialogue), takes and approvals, batch jobs with resume.
 - Phase 4: export assembly, SRT/VTT, timing manifests, `generate`/`jobs`/`export` CLI verbs.
 - Remote catalog refresh, GPU execution (CUDA), more backends (e.g. Qwen TTS), `models remove`.

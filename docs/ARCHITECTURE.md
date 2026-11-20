@@ -1,10 +1,10 @@
-# NoorVox architecture (as implemented, v0.1.0-dev / Phase 1)
+# NoorVox architecture (as implemented, v0.1.0-dev / Phases 1–2)
 
 Decisions and measurements: [ADR-0001](adr/0001-kokoro-backend-and-worker-model.md). Target design: [design/NOORVOX_DESIGN.md](design/NOORVOX_DESIGN.md).
 
 ```text
- noorvox.exe (CLI) ───────┐            (Phase 2: NoorVox Studio — WPF + WebView2 + React — uses the same core)
-                          ▼
+ noorvox.exe (CLI) ──────────┐      ┌──── NoorVoxStudio.exe (WPF) ── WebView2 ── React UI (https://app.noorvox.local)
+                             ▼      ▼                       typed JSON bridge: StudioApi (allow-listed methods)
                 ┌──────────────────────┐
                 │    NoorVox.Core      │  storage · catalog · installer · registry · WAV · IPC client · supervisor
                 └───┬──────────┬───────┘
@@ -27,10 +27,27 @@ Decisions and measurements: [ADR-0001](adr/0001-kokoro-backend-and-worker-model.
 | `src/NoorVox.Backends.Kokoro` | `KokoroBackend : ITtsBackend` | Core, KokoroSharp, ONNX Runtime |
 | `src/NoorVox.Worker` | Worker process (`NoorVox.Worker.exe`) | Core, backends |
 | `src/NoorVox.Cli` | `noorvox.exe` | Core (references the Worker project only so the exe is copied next to it) |
+| `src/NoorVox.Studio` | `NoorVoxStudio.exe`: WPF shell, WebView2 host, bridge, quit policy | Core, WebView2 (Worker referenced for copying only) |
+| `src/NoorVox.Studio.Web` | React 19 + TypeScript + Vite UI, built into `NoorVox.Studio/wwwroot` | — (talks only to the bridge) |
 | `tests/NoorVox.Tests` | xUnit v3; real processes, fake HTTP server | Core, Cli |
 | `spikes/KokoroSpike` | Phase 0 throwaway measurement tool | — |
 
-Rule: **inference libraries are only ever loaded in the worker process.** The CLI (and later the GUI) never loads ONNX Runtime.
+Rule: **inference libraries are only ever loaded in the worker process.** Neither the CLI nor the studio loads ONNX Runtime.
+Text → WAV logic lives once in `Core/Narration/NarrationService` and is used by both `noorvox synth` and the studio.
+
+## Studio (`NoorVox.Studio`, `NoorVox.Studio.Web`)
+
+| Concern | Implementation |
+|---|---|
+| Hosting | WebView2 with the user-data folder set to the configured `webview` storage path **before** creation. The UI is served from the virtual host `app.noorvox.local` (bundled files, no server, no CDN); generated previews from `media.noorvox.local` → `<temp>\studio\previews`. A CSP limits scripts, media and connections to those origins. |
+| Lock-down | Navigation outside the app origin is cancelled, new windows are blocked, permissions are denied, and devtools, context menus and accelerators are off unless debugging (`NOORVOX_DEVTOOLS=1`). Autoplay is allowed so generated audio can play straight away. |
+| Bridge | UI → `{id, method, params}` via `chrome.webview.postMessage`; host → `{id, ok, result|error}` or `{event, data}`. Only messages from the app origin are accepted. `StudioApi` is an explicit allow-list (app/storage/models/voices/workers/narration/settings/shell). Paths written come only from settings or native dialogs; revealed files must sit inside NoorVox storage; URLs must be https to model-source hosts. |
+| Events | `install.progress`, `narration.progress`, `app.closing`. Worker state is polled every 2 s (`workers.list`); CPU % is computed in the UI from two cumulative CPU-time samples. Session takes live in app state, so they survive page switches. |
+| Engine policy | One dedicated worker `studio`. It starts on first Generate (or from the Monitor) and stays warm. When *stop on exit* is on (default) it is bound to a Job Object owned by the main window for its whole lifetime, so even a crash of the studio ends it. Idle timeout comes from settings. |
+| Quit | `OnClosing` lists studio-launched workers. With stop-on-exit it stops them gracefully (with a forced fallback); otherwise it warns (keep / stop / cancel). The final `Close()` is posted to the dispatcher, and the job handle is disposed last. |
+| Single instance | Named mutex `Local\NoorVox.Studio`. |
+| Screenshots / smoke | `NoorVoxStudio.exe --page <p> --screenshot <png> [--screenshot-delay ms] [--exit-after-screenshot]`. `tools/studio-smoke.mjs` drives the real studio over the WebView2 DevTools protocol (localhost, test runs only): generate, monitor, unload, themes, quit, no leftover worker. |
+| Dev loop | `npm run dev` in `src/NoorVox.Studio.Web` runs the UI in a browser against `mock.ts` (clearly marked mock data). |
 
 ## Storage (`Core/Storage`)
 
@@ -82,6 +99,7 @@ and provenance (text sha256, voice, speed, model sha256, backend, worker, timing
 - CPU only. DirectML fails on Kokoro's ConvTranspose; CUDA is untested (needs CUDA 12 + cuDNN 9).
 - Synthesis can't be cancelled mid-job (a KokoroSharp limitation): cancel = force-stop or recycle the worker.
 - Output is not bit-reproducible run to run, so take identity uses inputs, not audio hashes.
-- No GUI, projects, batch jobs, subtitles or export assembly yet (Phases 2–4).
+- No projects, batch jobs, subtitles or export assembly yet (Phases 3–4).
+- The studio's Export uses a native Save dialog, which the smoke test can't automate; check it by hand.
 - The catalog is embedded; remote catalog refresh (for new models/voice packs without an app update) is planned.
 - Future backends (e.g. Qwen TTS) plug in behind `ITtsBackend` in their own worker; they will likely need a GPU and a Python sidecar.

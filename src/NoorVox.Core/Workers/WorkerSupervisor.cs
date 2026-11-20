@@ -66,7 +66,7 @@ public sealed record StopReport(string WorkerId, bool WasRunning, string Method,
 /// ownership registry + the worker itself) and long-lived hosts like the GUI (bound workers die with the host's job).
 /// Never touches processes it did not launch.
 /// </summary>
-public sealed class WorkerSupervisor(StorageContext storage, string workerExePath, string launchedBy) : IDisposable
+public sealed class WorkerSupervisor(StorageContext storage, string workerExePath, string launchedBy, JobObject? sharedJob = null) : IDisposable
 {
     public const string WorkerProcessName = "NoorVox.Worker";
     public const string TokenEnvVar = "NOORVOX_WORKER_TOKEN";
@@ -261,12 +261,13 @@ public sealed class WorkerSupervisor(StorageContext storage, string workerExePat
         var recordPath = RecordPath(id);
         var args = $"--worker-id {id} --pipe {pipe} --record \"{recordPath}\" --log \"{log}\" --idle-timeout {Math.Max(0, idleTimeoutSeconds)}";
 
-        if (boundToLauncher) _job ??= new JobObject();
+        if (boundToLauncher && sharedJob is null) _job ??= new JobObject();
+        var job = sharedJob ?? _job;
         int pid;
         try
         {
             (pid, _) = NativeProcess.Start(WorkerExePath, args, Path.GetDirectoryName(WorkerExePath)!,
-                new Dictionary<string, string> { [TokenEnvVar] = token }, breakawayFromJob: !boundToLauncher, boundToLauncher ? _job : null);
+                new Dictionary<string, string> { [TokenEnvVar] = token }, breakawayFromJob: !boundToLauncher, boundToLauncher ? job : null);
         }
         catch (System.ComponentModel.Win32Exception ex)
         {
@@ -430,6 +431,9 @@ public sealed class WorkerSupervisor(StorageContext storage, string workerExePat
         return results;
     }
 
-    /// <summary>Disposing closes the job handle: every worker bound to this supervisor is terminated by the OS.</summary>
+    /// <summary>
+    /// Disposing closes this supervisor's own job handle: every worker bound to it is terminated by the OS.
+    /// A <c>sharedJob</c> passed in by a long-lived host (the Studio) is owned and disposed by that host instead.
+    /// </summary>
     public void Dispose() => _job?.Dispose();
 }

@@ -1,0 +1,92 @@
+# NoorVox Studio — user guide (v0.1.0-dev)
+
+NoorVox Studio turns text into narration on your own PC. There is no account, cloud or paid credits, and after a one-time model
+download it works offline. All screenshots below are of the real application (captured by `tools/studio-smoke.mjs`).
+
+## Starting
+
+Run `NoorVoxStudio.exe`. To build it from source, see the README. Only one studio runs at a time.
+
+### First run
+
+![First run](screenshots/00-first-run.png)
+
+1. **Storage.** Choose where models, the download cache, temporary audio and exports go. The defaults are fine, and C: is fine,
+   but if you'd rather keep large files elsewhere, change it *now*, before anything downloads. The exact folder is always shown.
+2. **Install a voice.** One click installs Kokoro 82M with 54 voices (about 440 MB). Every file is checked against a known sha256.
+3. **Done.** Start narrating. You can skip setup and install a voice later from **Models & voices**.
+
+## Quick Narration
+
+![Quick Narration with a take](screenshots/02-narrate-take.png)
+
+- **Script:** type, paste or **Import text…** (.txt / .md). Your draft is saved automatically.
+  The word count and *estimated* duration are only estimates. Real durations always come from the generated audio.
+- **Voice & delivery:** pick a voice (grouped by language) and use **Audition voice** to hear a short sample.
+  **Speed** runs from 0.5× to 2.0× (double-click resets it to 1.0×). Kokoro has no pitch, emotion or style controls, so NoorVox doesn't show any.
+- **Generate narration** (or **Ctrl+Enter**). The first generation starts the voice engine (a few seconds); after that it stays warm.
+- **Takes this session:** each generation becomes a take you can play and seek on its waveform. Each shows its *measured* duration, voice,
+  speed, format and generation time. Takes survive page switches.
+- **Export…** opens a Save dialog in your Exports folder and writes the WAV plus a `.noorvox.json` provenance file
+  (text hash, voice, speed, model sha256, timings). The folder button shows the file in Explorer.
+
+Previews are kept in `<Temp>\studio\previews` and removed after 3 days. Export the takes you want to keep.
+
+## Models & voices
+
+![Models](screenshots/04-models.png)
+
+This page shows installed models with their license, source, location, size and sha256, plus their **voice packs**.
+**Install** downloads and verifies a model or voice pack, **Update to x.y** appears when a newer version exists (it installs alongside the old one),
+and **Verify files** re-hashes everything. **Change location…** moves where *new* installs go; existing files are not moved.
+
+## Monitor
+
+![Monitor](screenshots/03-monitor.png)
+
+The truthful view of what is running:
+
+- **State** is always shown as an icon plus a word: Stopped · Starting · Running (no model) · Loading model · Ready · Generating · Stopping · Crashed · Not responding.
+- PID, uptime, loaded model and its sha256, **memory**, **CPU** (measured between two samples), execution provider, jobs done and current work.
+- **GPU** says *unavailable*: NoorVox runs on the CPU today and never shows fake zeroes.
+- **Unload model** restarts the engine process, which is the only way to really free the model's memory (roughly 1 GB → under 50 MB).
+- **Stop** lets the current job finish first. **Force stop** (asks for confirmation) terminates immediately. **Stop all** also stops engines started from the command line.
+
+Only NoorVox-managed workers appear here. NoorVox never touches other programs' processes.
+
+## Settings
+
+![Settings](screenshots/05-settings.png)
+
+- **Storage locations:** change, open or reset each folder; free space is shown per drive.
+- **Appearance:** six themes: Nocturne, Daylight, Tape Deck, Thalassa, Graphite and Purple Heart.
+- **Voice engine:**
+  - *Stop voice engines when NoorVox Studio closes* (on by default). Even if the studio crashes, Windows ends its engines (Job Object).
+    Turn it off to keep a warm engine in the background; you'll be warned when closing.
+  - *Stop an idle engine after* 5 min to 1 h, or Never.
+  - *Default voice.*
+
+| Themes | |
+|---|---|
+| ![Daylight](screenshots/06-theme-daylight.png) | ![Tape Deck](screenshots/06-theme-tape.png) |
+| ![Thalassa](screenshots/06-theme-thalassa.png) | ![Graphite](screenshots/06-theme-graphite.png) |
+| ![Purple Heart](screenshots/06-theme-lavender.png) | |
+
+## Compared with the concept mockup
+
+The mockup (`design/NoorVox_Interface_Mockup.png`) was treated as guidance, not a target. Where they differ, it's on purpose:
+
+| Mockup | Studio v0.1 | Why |
+|---|---|---|
+| Pitch, Volume, Style/Tone knobs | Voice + Speed only, with a note explaining why | Kokoro doesn't support the others; no fake controls (spec §11.1) |
+| "Kokoro TTS (GPU) · VRAM 2.4 GB", "GPU: RTX 3080" | "Provider CPU · GPU unavailable" | GPU inference doesn't work yet (ADR-0001); the monitor shows what's true |
+| "Model Service" / "Embedding (optional)" rows | One row per real worker process | Those processes don't exist |
+| Generation progress "72%" | Phase text ("Starting voice engine…", "Synthesizing…") | Kokoro reports no percentage; invented percentages are banned (spec §13.2) |
+| Projects / Script / Library / Generate tabs, scene list, documentary hero | Narrate · Models & voices · Monitor · Settings | The project system is Phase 3; nothing that doesn't work is shown |
+| Same information hierarchy | Navigation, main workspace, voice panel on the right, takes/player, status bar with engine state | Kept |
+
+## Troubleshooting
+
+- **"Microsoft Edge WebView2 Runtime is required":** install it from Microsoft (it ships with Windows 11 and recent Windows 10).
+- **Engine shows Crashed:** press **Clear**, then generate again. The log path is in `<Temp>\logs\worker-studio.log`; the studio log is `<Temp>\logs\studio.log`.
+- **Everything from the command line:** `noorvox.exe` offers the same operations headless (docs/CLI_REFERENCE.md).

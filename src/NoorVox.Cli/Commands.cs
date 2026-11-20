@@ -4,6 +4,7 @@ using NoorVox.Core.Audio;
 using NoorVox.Core.Backends;
 using NoorVox.Core.Ipc;
 using NoorVox.Core.Models;
+using NoorVox.Core.Narration;
 using NoorVox.Core.Storage;
 using NoorVox.Core.Util;
 using NoorVox.Core.Workers;
@@ -352,152 +353,29 @@ public static class Commands
 
     public static async Task<CommandResult> Synth(CommandContext ctx)
     {
-        var total = Stopwatch.StartNew();
         var s = Storage();
         var a = ctx.Args;
-
         int sources = (a.Has("text") ? 1 : 0) + (a.Has("text-file") ? 1 : 0) + (a.Has("stdin") ? 1 : 0);
         if (sources != 1)
             throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "Give exactly one of --text, --text-file or --stdin.");
         string text = a.Has("text") ? a.Get("text") ?? ""
             : a.Has("text-file") ? await ReadTextFile(a.Require("text-file"), ctx.Ct)
             : await Console.In.ReadToEndAsync(ctx.Ct);
-        text = text.Trim();
-        if (text.Length == 0) throw new NoorVoxException(ErrorCodes.InvalidInput, ExitCode.InvalidInput, "Text is empty.");
-
-        var model = new ModelRegistry(s).Resolve(a.Get("model"));
-        var voiceId = a.Get("voice") ?? s.Settings.DefaultVoice ?? model.Manifest.DefaultVoice ?? model.Voices.FirstOrDefault().VoiceId
-            ?? throw new NoorVoxException(ErrorCodes.VoiceNotFound, ExitCode.ModelMissing, $"{model.Reference} has no voices installed.");
-        if (!model.Voices.Any(v => v.VoiceId == voiceId))
-            throw new NoorVoxException(ErrorCodes.VoiceNotFound, ExitCode.ModelMissing, $"Voice '{voiceId}' is not installed for {model.Reference}.",
-                new { voiceId, hint = $"noorvox voices list --model {model.Reference}" });
-        double speed = a.GetDouble("speed", 1.0);
-        if (speed is < 0.5 or > 2.0)
-            throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "--speed must be between 0.5 and 2.0 (Kokoro's supported range).");
-
-        var outPath = Path.GetFullPath(a.Get("out") ?? Path.Combine(s.Resolve(StorageKind.Exports).Path, $"noorvox_{DateTime.Now:yyyyMMdd_HHmmss}.wav"));
-        if (!outPath.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
-            throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "--out must end in .wav (WAV is the v1 output format).");
-        if (File.Exists(outPath) && !a.Has("overwrite"))
-            throw new NoorVoxException(ErrorCodes.OutputExists, ExitCode.IoError, $"{outPath} already exists. Pass --overwrite to replace it.", new { outputPath = outPath });
-
-        var tempDir = Path.Combine(s.TempDir, "synth");
-        Directory.CreateDirectory(tempDir);
-        var tempWav = Path.Combine(tempDir, $"{Guid.NewGuid():N}.wav");
 
         using var sup = Supervisor(s);
-        var (workerId, reused, started, keep) = await AcquireWorkerAsync(ctx, sup, s, model);
-        SynthesisResult result;
-        try
+        var result = await new NarrationService(s, sup).SynthesizeAsync(new NarrationRequest
         {
-            ctx.Progress($"Synthesizing {text.Length} chars with {voiceId} on worker '{workerId}'...", force: true);
-            result = await sup.SynthesizeAsync(workerId, new SynthesizeParams(text, voiceId, speed, tempWav), ctx.Ct);
-        }
-        catch
-        {
-            TryDelete(tempWav);
-            if (started && !keep) await SafeStop(sup, workerId);
-            throw;
-        }
-
-        bool stoppedAfter = false;
-        if (started && !keep)
-        {
-            await SafeStop(sup, workerId);
-            stoppedAfter = true;
-        }
-
-        // Validate before publishing: only a real, readable PCM WAV is moved into place.
-        WavInfo info;
-        try { info = WavInfo.Read(tempWav); }
-        catch (InvalidDataException ex)
-        {
-            TryDelete(tempWav);
-            throw new NoorVoxException(ErrorCodes.SynthesisFailed, ExitCode.SynthesisFailed, $"Worker output failed validation: {ex.Message}");
-        }
-        Directory.CreateDirectory(Path.GetDirectoryName(outPath)!);
-        File.Move(tempWav, outPath, overwrite: a.Has("overwrite"));
-        total.Stop();
-
-        var status = await sup.GetStatusAsync(workerId, CancellationToken.None);
-        var data = new Dictionary<string, object?>
-        {
-            ["outputPath"] = outPath,
-            ["durationMs"] = info.DurationMs,
-            ["durationSeconds"] = Math.Round(info.DurationSeconds, 3),
-            ["sampleRate"] = info.SampleRate,
-            ["channels"] = info.Channels,
-            ["bitsPerSample"] = info.BitsPerSample,
-            ["samples"] = info.Samples,
-            ["bytes"] = new FileInfo(outPath).Length,
-            ["text"] = new { chars = text.Length, sha256 = FileUtil.Sha256Text(text) },
-            ["voice"] = voiceId,
-            ["speed"] = speed,
-            ["model"] = new { id = model.Id, version = model.Version, modelSha256 = model.ModelSha256, license = model.Manifest.License },
-            ["backend"] = new { id = "kokoro-onnx", executionProvider = "CPU" },
-            ["worker"] = new { id = workerId, reused, startedForRequest = started, stoppedAfter, stateAfter = status.State },
-            ["timings"] = new { synthesisMs = result.ElapsedMs, totalMs = total.ElapsedMilliseconds, realTimeFactor = Math.Round(result.ElapsedMs / Math.Max(1.0, info.DurationMs), 3) },
-            ["createdAt"] = DateTimeOffset.Now,
-            ["generator"] = $"NoorVox {NoorVoxInfo.Version}",
-        };
-        if (a.Has("manifest"))
-        {
-            var manifestPath = Path.ChangeExtension(outPath, ".noorvox.json");
-            FileUtil.WriteAllTextAtomic(manifestPath, Json.Serialize(data));
-            data["manifestPath"] = manifestPath;
-        }
-        return new CommandResult(data, $"Wrote {outPath} ({info.DurationSeconds:0.00} s).");
-    }
-
-    /// <summary>
-    /// Worker policy for one-shot synthesis: reuse a running persistent worker when compatible; otherwise start one.
-    /// Without --keep-worker the new worker is bound to this CLI process (OS kills it if we die) and stopped afterwards.
-    /// </summary>
-    static async Task<(string Id, bool Reused, bool Started, bool Keep)> AcquireWorkerAsync(CommandContext ctx, WorkerSupervisor sup, StorageContext s, InstalledModel model)
-    {
-        bool keep = ctx.Args.Has("keep-worker");
-        var requested = ctx.Args.Get("worker");
-        var id = WorkerSupervisor.ValidateWorkerId(requested ?? DefaultWorker);
-        var st = await sup.GetStatusAsync(id, ctx.Ct);
-
-        if (st.State is "ready" or "generating" && st.LoadedModel?.Directory == model.Directory) return (id, true, false, true);
-        if (st.State is "idle")
-        {
-            ctx.Progress($"Loading {model.Reference} into worker '{id}'...", force: true);
-            await sup.LoadAsync(id, model, ctx.Ct);
-            return (id, true, false, true);
-        }
-        if (requested is not null && st.State is not ("stopped" or "error"))
-            throw new NoorVoxException(ErrorCodes.WorkerBusy, ExitCode.WorkerBusy,
-                $"Worker '{id}' is {st.State} with {(st.LoadedModel is null ? "no model" : st.LoadedModel.Id + "@" + st.LoadedModel.Version)}; it can't serve {model.Reference} now.", st);
-
-        if (st.State is "stopped" or "error" && (requested is not null || keep))
-        {
-            ctx.Progress($"Starting worker '{id}'...", force: true);
-            await sup.StartAsync(id, boundToLauncher: !keep, keep ? s.Settings.Workers.IdleTimeoutSeconds : 0, ctx.Ct);
-        }
-        else
-        {
-            // A persistent 'default' worker exists but serves another model (or is busy loading): use a private one-shot worker.
-            id = $"synth-{Environment.ProcessId}";
-            keep = false; // a private one-shot worker is always cleaned up
-            ctx.Progress($"Starting one-shot worker '{id}'...", force: true);
-            await sup.StartAsync(id, boundToLauncher: true, 0, ctx.Ct);
-        }
-        ctx.Progress($"Loading {model.Reference}...", force: true);
-        await sup.LoadAsync(id, model, ctx.Ct);
-        return (id, false, true, keep);
-    }
-
-    static async Task SafeStop(WorkerSupervisor sup, string id)
-    {
-        try { await sup.StopAsync(id, force: false, TimeSpan.FromSeconds(15), CancellationToken.None); }
-        catch (NoorVoxException) { await sup.StopAsync(id, force: true, TimeSpan.FromSeconds(5), CancellationToken.None); }
-    }
-
-    static void TryDelete(string path)
-    {
-        try { File.Delete(path); } catch (IOException) { }
+            Text = text,
+            VoiceId = a.Get("voice"),
+            Speed = a.GetDouble("speed", 1.0),
+            Model = a.Get("model"),
+            OutputPath = a.Get("out") ?? Path.Combine(s.Resolve(StorageKind.Exports).Path, $"noorvox_{DateTime.Now:yyyyMMdd_HHmmss}.wav"),
+            Overwrite = a.Has("overwrite"),
+            WriteManifest = a.Has("manifest"),
+            WorkerId = a.Get("worker"),
+            KeepWorker = a.Has("keep-worker"),
+        }, msg => ctx.Progress(msg, force: true), ctx.Ct);
+        return new CommandResult(result, $"Wrote {result.OutputPath} ({result.DurationSeconds:0.00} s).");
     }
 
     static async Task<string> ReadTextFile(string path, CancellationToken ct)

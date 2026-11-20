@@ -85,6 +85,21 @@ public class WorkerLifecycleTests
     }
 
     [Fact]
+    public async Task Shared_job_outlives_short_lived_supervisors_and_kills_on_host_exit()
+    {
+        // The studio creates a supervisor per request but owns one job for its lifetime.
+        using var home = new TestHome();
+        var job = new JobObject();
+        int pid;
+        using (var sup = new WorkerSupervisor(home.Storage(), TestPaths.WorkerExe, "studio", job))
+            pid = (await sup.StartAsync("studio", boundToLauncher: true, 0, CancellationToken.None)).Pid!.Value;
+        await Task.Delay(500);
+        Assert.True(TestPaths.ProcessAlive(pid)); // disposing a per-request supervisor must not kill the engine
+        job.Dispose();                            // the studio exiting (or crashing)
+        Assert.True(await TestPaths.WaitUntil(() => !TestPaths.ProcessAlive(pid), TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
     public async Task Force_stop_terminates_and_unload_recycles_to_a_new_process()
     {
         using var home = new TestHome();

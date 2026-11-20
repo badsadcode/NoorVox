@@ -1,0 +1,23 @@
+{
+  "name": "noorvox-studio-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "NoorVox Studio UI (React + TypeScript), hosted by NoorVox.Studio in WebView2. `npm run dev` runs it in a browser against a mock bridge.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "5.2.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.8"
+  }
+}

@@ -9,6 +9,14 @@ public sealed class NoorVoxSettings
     public string? DefaultModel { get; set; }
     public string? DefaultVoice { get; set; }
     public WorkerSettings Workers { get; set; } = new();
+    public StudioSettings Studio { get; set; } = new();
+}
+
+/// <summary>NoorVox Studio (GUI) preferences.</summary>
+public sealed class StudioSettings
+{
+    /// <summary>nocturne · daylight · tape · thalassa · graphite · lavender (see docs/design/themes.html).</summary>
+    public string Theme { get; set; } = "nocturne";
 }
 
 /// <summary>Each storage class is independently configurable. <c>null</c> = use the default for the current home mode.</summary>
