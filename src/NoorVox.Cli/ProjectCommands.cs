@@ -1,4 +1,5 @@
 using NoorVox.Core;
+using NoorVox.Core.Export;
 using NoorVox.Core.Models;
 using NoorVox.Core.Projects;
 using NoorVox.Core.Storage;
@@ -259,6 +260,65 @@ public static class ProjectCommands
     }
 
     // ---------------------------------------------------------------- export
+
+    public static Task<CommandResult> Assemble(CommandContext ctx) => Task.Run(() =>
+    {
+        var s = Storage();
+        var p = Open(ctx);
+        var model = Model(s, p);
+        var a = ctx.Args;
+        int? rate = a.Has("rate") ? a.GetInt("rate", 0) : null;
+        if (rate is not null and not (16_000 or 22_050 or 24_000 or 32_000 or 44_100 or 48_000 or 96_000))
+            throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "--rate must be one of 16000, 22050, 24000, 32000, 44100, 48000, 96000.");
+        var peak = a.GetDouble("peak-dbfs", -1.0);
+        if (peak is > 0 or < -30) throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "--peak-dbfs must be between -30 and 0.");
+        var options = new AssemblyOptions
+        {
+            SampleRate = rate, NormalizePeak = a.Has("normalize"), PeakDbfs = peak,
+            AllowMissing = a.Has("allow-missing"), Overwrite = a.Has("overwrite"), Subtitles = !a.Has("no-subtitles"),
+        };
+        var sections = a.Get("section") is { } one ? [one] : p.Project.Sections.Select(x => x.SectionId).ToList();
+        if (sections.Count == 0) throw new NoorVoxException(ErrorCodes.InvalidInput, ExitCode.InvalidInput, "The project has no sections yet.");
+        var outDir = Path.GetFullPath(a.Get("out") ?? Path.Combine(p.Root, "exports", $"assembled_{DateTime.Now:yyyyMMdd_HHmmss}"));
+
+        var results = new List<AssemblyResult>();
+        foreach (var id in sections)
+        {
+            ctx.Progress($"Assembling {id}...", force: true);
+            results.Add(Assembler.AssembleSection(p, model, id, outDir, options));
+        }
+        string? index = null;
+        if (results.Count > 1)
+        {
+            index = Path.Combine(outDir, "assembly_index.json");
+            NoorVox.Core.Util.FileUtil.WriteAllTextAtomic(index, Json.Serialize(new
+            {
+                schemaVersion = 1, kind = "noorvox.assembly-index", generator = $"NoorVox {NoorVoxInfo.Version}", createdAt = DateTimeOffset.Now,
+                project = new { p.Project.ProjectId, p.Project.Title, p.Project.Kind, root = p.Root },
+                sections = results.Select(r => new { r.Manifest.Audio.File, manifest = r.ManifestPath, r.Manifest.Audio.DurationMs }),
+                totalDurationMs = results.Sum(r => r.Manifest.Audio.DurationMs),
+            }));
+        }
+        var warnings = new List<string>();
+        foreach (var (r, id) in results.Zip(sections))
+        {
+            if (r.Manifest.Missing.Count > 0) warnings.Add($"{id}: {r.Manifest.Missing.Count} segment(s) without an approved take were left out.");
+            if (r.Manifest.Stale.Count > 0) warnings.Add($"{id}: {r.Manifest.Stale.Count} approved take(s) are out of date: {string.Join(", ", r.Manifest.Stale.Take(10))}");
+        }
+        var data = new
+        {
+            outputDir = outDir,
+            index,
+            sections = results.Select(r => new
+            {
+                manifest = r.ManifestPath, audio = r.AudioPath, srt = r.SrtPath, vtt = r.VttPath,
+                r.Manifest.Audio.DurationMs, r.Manifest.Audio.SampleRate, segments = r.Manifest.Segments.Count, r.Manifest.Missing, r.Manifest.Stale,
+                gainDb = r.Manifest.Processing.GainDb,
+            }),
+            totalDurationMs = results.Sum(r => r.Manifest.Audio.DurationMs),
+        };
+        return new CommandResult(data, $"Assembled {results.Count} section(s), {results.Sum(r => r.Manifest.Audio.DurationMs) / 1000.0:0.0} s total, into {outDir}.", warnings);
+    }, ctx.Ct);
 
     public static Task<CommandResult> ExportClips(CommandContext ctx)
     {

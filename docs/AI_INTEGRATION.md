@@ -143,11 +143,34 @@ Rules for agents working with projects:
 - **Edited text** makes approved segments `stale` (`projects show`). Regenerate them, then let the user approve.
 - **Check before handing off:** `projects show --json` → `counts.approved == segments`, or export with `--allow-missing` and report `missing`.
 
-## 8. Handing audio to a video agent
+## 8. Finished episode for a video agent (script → WAV + subtitles + timing manifest)
 
-Pass along `clips.json` from `export clips` (or the `{id, path, durationMs, text}` list you collected from `synth`). Don't re-derive durations
-from the text: use `durationMs`. Single-file episode assembly with pauses, SRT/VTT subtitles and a timing manifest are Phase 4.
-They don't exist in v0.1.
+`examples/agent-episode.ps1` is the whole pipeline, and it was run against v0.1.0-dev (Phase 4): Markdown script in, verified episode out.
+
+```powershell
+.\examples\agent-episode.ps1 -Script .\examples\projects\episode2.md -ProjectDir "E:\AI\NoorVox\Projects\Episode 2" -Voice bm_george
+```
+
+The steps it performs, which you can also run yourself:
+
+```powershell
+noorvox projects create --path $p --title "Episode 2" --kind documentary --voice bm_george --json --quiet
+noorvox projects import --project $p --file episode2.md --json --quiet
+noorvox generate --project $p --section ep01 --approve --json --quiet            # exit 11 → jobs resume (see §7)
+noorvox export assemble --project $p --section ep01 --rate 48000 --normalize --out "$p\exports\episode" --json --quiet
+```
+
+Hand the video agent the **`*.manifest.json`** (schema: `docs/schemas/assembly-manifest.schema.json`). It points to the WAV, the SRT/VTT and
+every segment's exact `startMs`/`endMs`, text, speaker and **`notes`**. Notes are the script's `<!-- visual: … -->` comments, meant as cut and B-roll cues.
+
+Verify before handing off (the example does all of this):
+
+- `audio.file`, `subtitles.srt` and `subtitles.vtt` exist; the WAV size is `44 + 2 × audio.samples`.
+- Segments are in order: each `startMs` is at least the previous `endMs`, and the last `endMs` ≤ `audio.durationMs`.
+- `missing` and `stale` are empty (or the user agreed otherwise); the SRT has one cue per segment.
+
+Don't re-time anything from text length, and don't invent word timings: the manifest is segment-accurate by design.
+For game dialogue, use `export clips` (one file per line id) instead of assembly.
 
 ## Reference
 

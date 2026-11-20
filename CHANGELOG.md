@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.0-dev — Phase 4: assembly, subtitles, timing manifests (2026-11-20)
+
+### Implemented and tested
+- `export assemble` (CLI) and **Assemble…** (studio): one WAV per episode/chapter from approved takes with the project's structured pauses
+  (edge, scene, segment, per-segment overrides), at native 24 kHz or resampled to 44.1/48 kHz (windowed sinc), optional peak normalisation
+  (export only), SRT + VTT captions per segment, and a timing manifest with exact segment start/end, text, speaker and editorial notes.
+- JSON Schema for the manifest (`docs/schemas/assembly-manifest.schema.json`); a test checks real manifests against it.
+- `examples/agent-episode.ps1`: Markdown script → verified 48 kHz episode + subtitles + manifest, headless (the spec's Phase 4 gate);
+  ran in 34 s for a 41 s episode.
+- CLI output is culture-invariant (numbers and dates don't follow the Windows locale).
+- Studio: take playback fixed (audio served by a request handler instead of a late virtual-host mapping); portable publish mode.
+- 49 xUnit tests (+11: resampler quality, sample-exact timeline, pauses, normalisation, subtitles, policies, schema);
+  projects smoke test 12/12.
+
 ## 0.1.0-dev — Phase 3: production workflows (2026-11-20)
 
 ### Implemented and tested
@@ -58,5 +72,5 @@
 - Docs: CLI reference, AI integration cookbook, architecture, ADR-0001, AGENTS.md, a runnable example.
 
 ### Planned (not implemented)
-- Phase 4: export assembly, SRT/VTT, timing manifests, `generate`/`jobs`/`export` CLI verbs.
+- Phase 5: polish and delivery (accessibility pass, performance for very large projects, installer, diagnostics bundle, storage audit).
 - Remote catalog refresh, GPU execution (CUDA), more backends (e.g. Qwen TTS), `models remove`.

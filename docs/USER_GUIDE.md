@@ -46,8 +46,14 @@ Use a project for anything bigger than a quick line: a documentary episode, an a
   - While a job runs you see progress and the current segment, with **Stop after this one** and **Stop now**. Every finished segment is saved immediately.
   - A stopped or crashed job shows **Resume**, which continues where it left off.
 - **Right, Voice / Cast:** the default voice, and for dialogue one voice per character. Recasting marks affected segments as changed.
+- **Assemble…** joins the approved takes of the current episode/chapter (or all of them) into one WAV with the project's pauses.
+  Choose 48 kHz (video), 44.1 kHz or the native 24 kHz, optional SRT/VTT subtitles and peak normalisation (export only).
+  Next to the WAV you get a **timing manifest**: exact start and end of every segment, text, speaker and your `<!-- notes -->`,
+  ready for video editing or a video agent. **Open folder** in the bar that appears takes you there.
 - **Export clips…** copies the approved takes into a folder you choose, named by id (`npc_vendor_greeting_001.wav`, `001_ep01.s01.p001.wav`),
-  plus `clips.json` with durations, text and speakers. Joining an episode into one file with pauses and subtitles comes in Phase 4.
+  plus `clips.json` with durations, text and speakers. Best for game dialogue.
+
+![Assemble dialog](screenshots/14-assemble.png)
 
 ![Stopped job with Resume](screenshots/12-project-interrupted.png)
 
@@ -117,7 +123,7 @@ The mockup (`design/NoorVox_Interface_Mockup.png`) was treated as guidance, not 
 | "Kokoro TTS (GPU) · VRAM 2.4 GB", "GPU: RTX 3080" | "Provider CPU · GPU unavailable" | GPU inference doesn't work yet (ADR-0001); the monitor shows what's true |
 | "Model Service" / "Embedding (optional)" rows | One row per real worker process | Those processes don't exist |
 | Generation progress "72%" | Phase text ("Starting voice engine…", "Synthesizing…") | Kokoro reports no percentage; invented percentages are banned (spec §13.2) |
-| Projects / Script / Library / Generate tabs, scene list | Projects (tree, segment editor, takes, generate, cast) · Quick narration · Models & voices · Monitor · Settings | Same hierarchy, built for real (Phase 3); Library and the waveform transport per scene come with export assembly |
+| Projects / Script / Library / Generate tabs, scene list | Projects (tree, segment editor, takes, generate, cast, assemble, export) · Quick narration · Models & voices · Monitor · Settings | Same hierarchy, built for real; a separate Library view isn't needed yet because exports land in plain folders |
 | Documentary / Audiobook / Narration / Dialogue / Education / Custom tabs | The same six templates, chosen when creating a project | A template is a starting point, not a mode you switch |
 | Same information hierarchy | Navigation, main workspace, voice panel on the right, takes/player, status bar with engine state | Kept |
 

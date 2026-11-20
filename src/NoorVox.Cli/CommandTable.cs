@@ -76,6 +76,10 @@ public static class CommandTable
             "noorvox export clips --project DIR [--section ID] [--out DIR] [--allow-missing] [--overwrite] [--json]",
             ["project", "section", "out", "allow-missing", "overwrite"], ProjectCommands.ExportClips),
 
+        new(["export", "assemble"], "Join approved takes into one WAV per section with structured pauses, plus SRT/VTT and a timing manifest for video.",
+            "noorvox export assemble --project DIR [--section ID] [--rate 24000|44100|48000] [--normalize] [--peak-dbfs DB] [--no-subtitles] [--out DIR] [--allow-missing] [--overwrite] [--json]",
+            ["project", "section", "rate", "normalize", "peak-dbfs", "no-subtitles", "out", "allow-missing", "overwrite"], ProjectCommands.Assemble),
+
         new(["synth"], "Synthesize text to a WAV file and report measured duration and provenance.",
             "noorvox synth (--text TEXT | --text-file FILE | --stdin) [--out FILE.wav] [--voice ID] [--speed X] [--model REF] [--worker ID] [--keep-worker] [--overwrite] [--manifest] [--json]",
             ["text", "text-file", "stdin", "out", "voice", "speed", "model", "worker", "keep-worker", "overwrite", "manifest"], Commands.Synth),

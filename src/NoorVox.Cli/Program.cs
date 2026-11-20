@@ -3,6 +3,9 @@ using NoorVox.Cli;
 using NoorVox.Core;
 
 Console.OutputEncoding = new UTF8Encoding(false);
+// Output is read by scripts and agents: numbers and dates must not depend on the Windows locale ("34.6", not "34,6").
+System.Globalization.CultureInfo.DefaultThreadCurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
+System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
 Console.InputEncoding = new UTF8Encoding(false);
 
 using var cts = new CancellationTokenSource();

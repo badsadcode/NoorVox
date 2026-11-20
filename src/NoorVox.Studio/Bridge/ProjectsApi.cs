@@ -4,6 +4,7 @@ using System.IO;
 using System.Text.Json;
 using System.Windows;
 using NoorVox.Core;
+using NoorVox.Core.Export;
 using NoorVox.Core.Models;
 using NoorVox.Core.Projects;
 using NoorVox.Core.Storage;
@@ -36,6 +37,7 @@ public sealed class ProjectsApi(MainWindow window, JobObject job, BridgeHost bri
     public sealed record ResumeArgs(string Path, string JobId);
     public sealed record ApproveArgs(string Path, string SegmentId, string? TakeId);
     public sealed record ExportArgs(string Path, string? SectionId, bool AllowMissing);
+    public sealed record AssembleArgs(string Path, string? SectionId, int? Rate, bool Normalize, bool Subtitles, bool AllowMissing);
 
     public async Task<object?> InvokeAsync(string method, JsonElement? p, CancellationToken ct) => method switch
     {
@@ -56,6 +58,8 @@ public sealed class ProjectsApi(MainWindow window, JobObject job, BridgeHost bri
         "projects.takes" => Takes(Arg<SegmentArgs>(p)),
         "projects.approve" => Approve(Arg<ApproveArgs>(p)),
         "projects.export" => await Export(Arg<ExportArgs>(p)),
+        "projects.assemble" => await Assemble(Arg<AssembleArgs>(p)),
+        "projects.revealOutput" => RevealOutput(Arg<RevealOutputArgs>(p)),
         "projects.reveal" => Reveal(Arg<PathArgs>(p)),
         _ => throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, $"Unknown bridge method '{method}'."),
     };
@@ -322,6 +326,55 @@ public sealed class ProjectsApi(MainWindow window, JobObject job, BridgeHost bri
         var name = $"{a.SectionId ?? "all"}_clips_{DateTime.Now:yyyyMMdd_HHmmss}";
         var r = ClipExporter.Export(p, model, a.SectionId, Path.Combine(parent, name), a.AllowMissing, overwrite: false);
         return new { cancelled = false, result = r };
+    }
+
+    async Task<object?> Assemble(AssembleArgs a)
+    {
+        var p = OpenAllowed(a.Path);
+        var model = ModelOrNull(p) ?? throw new NoorVoxException(ErrorCodes.ModelNotInstalled, ExitCode.ModelMissing, "Install a voice model first.");
+        if (a.Rate is not null and not (24_000 or 44_100 or 48_000))
+            throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "Sample rate must be 24000, 44100 or 48000.");
+        var sections = a.SectionId is { } one ? [one] : p.Project.Sections.Select(s => s.SectionId).ToList();
+        // Check approvals before asking for a folder, so the user isn't sent through a dialog for nothing.
+        if (!a.AllowMissing)
+        {
+            var missing = p.AllSegments().Where(l => sections.Contains(l.Section.SectionId) && !string.IsNullOrWhiteSpace(l.Segment.Text)
+                && (l.Segment.ApprovedTakeId is null || p.Takes(l.Segment.SegmentId).All(t => t.TakeId != l.Segment.ApprovedTakeId))).Count();
+            if (missing > 0)
+                throw new NoorVoxException(ErrorCodes.InvalidInput, ExitCode.InvalidInput, $"{missing} segment(s) have no approved take.", new { total = missing });
+        }
+        var parent = await Application.Current.Dispatcher.InvokeAsync(() =>
+        {
+            var dlg = new Microsoft.Win32.OpenFolderDialog { Title = "Assemble into…", InitialDirectory = Path.Combine(p.Root, "exports") };
+            return dlg.ShowDialog(window) == true ? dlg.FolderName : null;
+        });
+        if (parent is null) return new { cancelled = true };
+        var outDir = Path.Combine(parent, $"assembled_{DateTime.Now:yyyyMMdd_HHmmss}");
+        var options = new AssemblyOptions { SampleRate = a.Rate, NormalizePeak = a.Normalize, Subtitles = a.Subtitles, AllowMissing = a.AllowMissing };
+        var results = await Task.Run(() => sections.Select(id =>
+        {
+            bridge.Emit("job.status", new { path = p.Root, message = $"Assembling {id}…" });
+            return Assembler.AssembleSection(p, model, id, outDir, options);
+        }).ToList());
+        return new
+        {
+            cancelled = false,
+            outputDir = outDir,
+            sections = results.Select(r => new { r.AudioPath, r.SrtPath, r.VttPath, r.ManifestPath, r.Manifest.Audio.DurationMs, r.Manifest.Audio.SampleRate,
+                segments = r.Manifest.Segments.Count, missing = r.Manifest.Missing.Count, stale = r.Manifest.Stale.Count }),
+        };
+    }
+
+    public sealed record RevealOutputArgs(string Folder);
+
+    /// <summary>Opens an export folder, but only one that NoorVox wrote (it holds an assembly manifest or clips.json).</summary>
+    static object RevealOutput(RevealOutputArgs a)
+    {
+        var dir = Path.GetFullPath(a.Folder);
+        bool ours = Directory.Exists(dir) && (File.Exists(Path.Combine(dir, "clips.json")) || Directory.EnumerateFiles(dir, "*.manifest.json").Any());
+        if (!ours) throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "That folder can't be opened from here.");
+        Process.Start(new ProcessStartInfo("explorer.exe", $"\"{dir}\"") { UseShellExecute = true });
+        return new { path = dir };
     }
 
     static object Reveal(PathArgs a)

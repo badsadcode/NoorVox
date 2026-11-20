@@ -10,7 +10,7 @@ public sealed class ParsedArgs
     static readonly HashSet<string> Flags = new(StringComparer.OrdinalIgnoreCase)
     {
         "json", "non-interactive", "help", "quiet", "force", "all", "keep-worker", "overwrite", "check",
-        "no-voices", "stdin", "graceful", "manifest", "full", "quick", "version", "approve", "latest", "allow-missing", "no-text", "segments",
+        "no-voices", "stdin", "graceful", "manifest", "full", "quick", "version", "approve", "latest", "allow-missing", "no-text", "segments", "normalize", "no-subtitles",
     };
 
     public List<string> Words { get; } = [];

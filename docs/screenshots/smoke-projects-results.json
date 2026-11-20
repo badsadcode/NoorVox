@@ -1,5 +1,5 @@
 {
-  "when": "2026-11-20T16:39:36.559Z",
+  "when": "2026-11-20T17:16:47.812Z",
   "results": [
     {
       "name": "projects page lists the project",
@@ -47,6 +47,11 @@
       "detail": "ok 4.97"
     },
     {
+      "name": "assemble dialog offers rate, subtitles and normalisation",
+      "ok": true,
+      "detail": ""
+    },
+    {
       "name": "studio closes cleanly",
       "ok": true,
       "detail": "exit 0"
@@ -54,7 +59,7 @@
     {
       "name": "no worker left after close",
       "ok": true,
-      "detail": "worker pid 18408"
+      "detail": "worker pid 46620"
     }
   ]
 }

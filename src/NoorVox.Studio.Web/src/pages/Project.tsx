@@ -26,6 +26,8 @@ export function Project() {
   const [status, setStatus] = useState<string | null>(null);
   const [playing, setPlaying] = useState<string | null>(null);
   const [confirmExport, setConfirmExport] = useState<{ missing: number; sectionId: string | null } | null>(null);
+  const [assembling, setAssembling] = useState(false);
+  const [lastOutput, setLastOutput] = useState<{ folder: string; summary: string } | null>(null);
   const audio = useRef(new Audio());
   const reloadTimer = useRef<number | undefined>(undefined);
 
@@ -121,7 +123,8 @@ export function Project() {
     try {
       const r = await call<{ cancelled: boolean; result?: { outputDir: string; clips: unknown[]; missing: string[]; stale: string[] } }>("projects.export", { path: ov.root, sectionId, allowMissing });
       if (r.cancelled) return;
-      notify(`Exported ${r.result!.clips.length} clip(s) to ${r.result!.outputDir}${r.result!.stale.length ? ` (${r.result!.stale.length} approved take(s) are out of date)` : ""}.`);
+      notify(`Exported ${r.result!.clips.length} clip(s)${r.result!.stale.length ? ` (${r.result!.stale.length} approved take(s) are out of date)` : ""}.`);
+      setLastOutput({ folder: r.result!.outputDir, summary: `${r.result!.clips.length} clips + clips.json` });
     } catch (e) {
       if (e instanceof BridgeError && e.code === "invalid_input" && /no approved take/.test(e.message)) {
         const d = e.details as { total?: number } | undefined;
@@ -147,6 +150,7 @@ export function Project() {
         </div>
         <div className="row">
           <button className="btn" onClick={importScript}><Upload size={16} /> Import script…</button>
+          <button className="btn primary" onClick={() => setAssembling(true)} disabled={approved === 0}><Download size={16} /> Assemble…</button>
           <button className="btn" onClick={() => exportClips(null, false)} disabled={approved === 0}><Download size={16} /> Export clips…</button>
           <button className="btn" onClick={() => call("projects.reveal", { path: ov.root })} aria-label="Open project folder"><Folder size={16} /></button>
         </div>
@@ -154,6 +158,12 @@ export function Project() {
       <div className="bar" style={{ marginBottom: 14 }} role="progressbar" aria-label="Approved" aria-valuenow={total ? Math.round(approved * 100 / total) : 0}>
         <i style={{ width: `${total ? (approved * 100) / total : 0}%`, background: "var(--ok)" }} />
       </div>
+      {lastOutput && (
+        <div className="note" style={{ marginBottom: 12, display: "flex", gap: 10, alignItems: "center" }}>
+          <Check size={15} /> <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>Exported {lastOutput.summary} to <span className="mono">{lastOutput.folder}</span></span>
+          <button className="btn small" style={{ marginLeft: "auto" }} onClick={() => call("projects.revealOutput", { folder: lastOutput.folder }).catch((e) => notify(errorText(e), true))}><Folder size={14} /> Open folder</button>
+        </div>
+      )}
       {ov.warnings.length > 0 && <p className="note err" style={{ marginBottom: 12 }}>{ov.warnings.slice(0, 3).join(" · ")}{ov.warnings.length > 3 ? ` · +${ov.warnings.length - 3} more` : ""}</p>}
 
       {ov.sections.length === 0 ? (
@@ -217,6 +227,10 @@ export function Project() {
         </div>
       )}
 
+      {assembling && (
+        <AssembleDialog ov={ov} sectionId={section?.sectionId ?? null} onClose={() => setAssembling(false)}
+          onDone={(folder, summary) => { setAssembling(false); setLastOutput({ folder, summary }); notify(`Assembled ${summary}.`); }} />
+      )}
       {confirmExport && (
         <Confirm title="Some segments aren't approved" confirmText="Export approved only" onCancel={() => setConfirmExport(null)}
           onConfirm={() => { const c = confirmExport; setConfirmExport(null); exportClips(c.sectionId, true); }}>
@@ -404,5 +418,73 @@ function CastPanel({ ov, voices, onChanged }: { ov: ProjectOverview; voices: Voi
       ))}
       <p className="muted small" style={{ marginBottom: 0 }}>Changing a voice never touches approved takes: affected segments are marked as changed until you regenerate and approve.</p>
     </section>
+  );
+}
+
+function AssembleDialog({ ov, sectionId, onClose, onDone }: {
+  ov: ProjectOverview; sectionId: string | null; onClose: () => void; onDone: (folder: string, summary: string) => void;
+}) {
+  const { notify } = useStudio();
+  const [scope, setScope] = useState<"section" | "all">(sectionId ? "section" : "all");
+  const [rate, setRate] = useState<number | null>(48000);
+  const [subtitles, setSubtitles] = useState(true);
+  const [normalize, setNormalize] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [missing, setMissing] = useState<number | null>(null);
+  const k = ov.kind;
+  const sectionTitle = ov.sections.find((s) => s.sectionId === sectionId)?.title;
+
+  const run = async (allowMissing: boolean) => {
+    setBusy(true);
+    try {
+      const r = await call<{ cancelled: boolean; outputDir?: string; sections?: { durationMs: number; segments: number; missing: number }[] }>("projects.assemble", {
+        path: ov.root, sectionId: scope === "section" ? sectionId : null, rate, normalize, subtitles, allowMissing,
+      });
+      if (r.cancelled) { setBusy(false); return; }
+      const total = r.sections!.reduce((a, x) => a + x.durationMs, 0);
+      onDone(r.outputDir!, `${plural(r.sections!.length, k.sectionLabel)}, ${fmtDuration(total)}${subtitles ? " with SRT/VTT" : ""} + timing manifest`);
+    } catch (e) {
+      setBusy(false);
+      if (e instanceof BridgeError && e.code === "invalid_input" && (e.details as { total?: number } | undefined)?.total) setMissing((e.details as { total: number }).total);
+      else notify(errorText(e), true);
+    }
+  };
+
+  return (
+    <div className="overlay" role="dialog" aria-modal="true" aria-label="Assemble">
+      <div className="modal" style={{ width: "min(520px, 100%)" }}>
+        <h3>Assemble {scope === "section" ? k.sectionLabel.toLowerCase() : "project"}</h3>
+        <p className="muted" style={{ marginTop: 0 }}>
+          Joins the approved takes into one WAV per {k.sectionLabel.toLowerCase()} with the project's pauses, and writes a timing manifest
+          (exact start/end of every {k.segmentLabel.toLowerCase()}, text, speaker and notes) for video editing.
+        </p>
+        <div className="stack" style={{ gap: 10 }}>
+          <div role="radiogroup" aria-label="Scope" className="stack" style={{ gap: 4 }}>
+            {sectionId && <label className="radio"><input type="radio" checked={scope === "section"} onChange={() => setScope("section")} /> {k.sectionLabel}: {sectionTitle}</label>}
+            <label className="radio"><input type="radio" checked={scope === "all"} onChange={() => setScope("all")} /> Every {k.sectionLabel.toLowerCase()} ({ov.sections.length})</label>
+          </div>
+          <div style={{ maxWidth: 300 }}>
+            <label className="field" htmlFor="rate">Sample rate</label>
+            <select id="rate" value={rate ?? ""} onChange={(e) => setRate(e.target.value ? Number(e.target.value) : null)}>
+              <option value="48000">48 kHz (video)</option>
+              <option value="44100">44.1 kHz (audio / podcast)</option>
+              <option value="">24 kHz (native, no resampling)</option>
+            </select>
+          </div>
+          <label className="radio"><input type="checkbox" checked={subtitles} onChange={(e) => setSubtitles(e.target.checked)} /> Subtitles (SRT and VTT, one cue per {k.segmentLabel.toLowerCase()})</label>
+          <label className="radio"><input type="checkbox" checked={normalize} onChange={(e) => setNormalize(e.target.checked)} /> Normalise peak to −1 dBFS (export only; takes are never changed)</label>
+          {missing !== null && (
+            <p className="note err" style={{ margin: 0 }}>
+              {missing} {k.segmentLabel.toLowerCase()}(s) have no approved take. Approve them first, or assemble without them (they'll be listed as missing).
+            </p>
+          )}
+        </div>
+        <div className="row" style={{ justifyContent: "flex-end", marginTop: 18 }}>
+          <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
+          {missing !== null && <button className="btn" disabled={busy} onClick={() => run(true)}>Assemble without them…</button>}
+          <button className="btn primary" disabled={busy} onClick={() => run(false)}>{busy ? <Spinner size={15} /> : <Download size={15} />} Choose folder & assemble…</button>
+        </div>
+      </div>
+    </div>
   );
 }

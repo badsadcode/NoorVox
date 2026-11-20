@@ -1,7 +1,7 @@
 # NoorVox CLI reference
 
 `noorvox.exe` is the headless interface to NoorVox. It never starts WebView2, and it never prompts.
-This document covers **what is implemented in v0.1.0-dev (Phases 1–3)**. Anything not listed here does not exist yet.
+This document covers **what is implemented in v0.1.0-dev (Phases 1–4)**. Anything not listed here does not exist yet.
 
 - Machine-readable help: `noorvox --help --json` (commands, options, exit codes).
 - Contract version: envelope `schemaVersion: 1`.
@@ -245,7 +245,52 @@ Default `--out`: `<project>\exports\<section|all>_clips_<timestamp>`.
 - Approved-but-stale takes are exported and reported in `warnings`.
 - Existing files are never overwritten without `--overwrite`.
 
+### `noorvox export assemble --project DIR [--section ID] [--rate HZ] [--normalize] [--peak-dbfs DB] [--no-subtitles] [--out DIR] [--allow-missing] [--overwrite]`
+Joins each section's approved takes into **one WAV** (all sections if `--section` is omitted) and writes, next to it:
+
+| File | Content |
+|---|---|
+| `<sectionId>_<title>.wav` | PCM 16-bit mono at `--rate` (default: the model's native 24000; allowed 16000, 22050, 24000, 32000, 44100, 48000, 96000) |
+| `<sectionId>_<title>.srt` / `.vtt` | One cue per segment at its measured position; text wrapped at 42 characters; dialogue speakers as `NAME:` (SRT) or `<v Name>` (VTT). `--no-subtitles` skips them. |
+| `<sectionId>_<title>.manifest.json` | Timing manifest, schema [schemas/assembly-manifest.schema.json](schemas/assembly-manifest.schema.json) |
+| `assembly_index.json` | Only when several sections are assembled: the list of manifests and the total duration |
+
+- **Pauses** come from the project (`pauses` in `noorvox.project.json`): `sectionEdgeMs` at the start and end, `betweenScenesMs` across a scene
+  boundary, `betweenSegmentsMs` otherwise. A segment's `pauseBeforeMs`/`pauseAfterMs` replaces the adjacent gap (if both sides set one, the larger wins).
+- **Resampling** uses windowed sinc (Blackman, 32 zero-crossings), tested for length, pitch, level and aliasing rejection.
+  **`--normalize`** scales the export so its peak is `--peak-dbfs` (default −1). Takes on disk are never modified; `processing.gainDb` records the gain.
+- **Timing** is exact: every segment's `startMs/endMs` (and `startSample/endSample` at the output rate) is where its approved take sits in the file.
+  There's no word-level alignment.
+- Segments without an approved take fail the command (exit 5) unless `--allow-missing` is given; then they're left out and listed in `missing`.
+  Approved but out-of-date takes are used and listed in `stale` (also in `warnings`).
+- Default `--out`: `<project>\exports\assembled_<timestamp>`. Existing files are never replaced without `--overwrite`.
+
+`data`: `outputDir`, `index`, `sections[] {manifest, audio, srt, vtt, durationMs, sampleRate, segments, missing, stale, gainDb}`, `totalDurationMs`.
+
+### Manifest at a glance (`*.manifest.json`)
+
+```json
+{
+  "schemaVersion": 1, "kind": "noorvox.assembly", "generator": "NoorVox 0.1.0-dev",
+  "project": { "projectId": "…", "title": "NoorEngine Documentary", "kind": "documentary", "root": "E:\\…" },
+  "section": { "sectionId": "ep01", "title": "Episode 1 – The Terrible Idea" },
+  "audio": { "file": "E:\\…\\ep01_episode_1_the_terrible_idea.wav", "sampleRate": 48000, "channels": 1, "bitsPerSample": 16,
+             "samples": 1661520, "durationMs": 34615, "bytes": 3323084, "sha256": "…" },
+  "subtitles": { "srt": "…srt", "vtt": "…vtt", "granularity": "segment" },
+  "pauses": { "betweenSegmentsMs": 350, "betweenScenesMs": 900, "sectionEdgeMs": 1500, "rule": "…" },
+  "processing": { "sourceSampleRate": 24000, "resampled": true, "resampler": "windowed-sinc (Blackman, 32 zero-crossings)",
+                  "normalized": true, "gainDb": 4.49, "peakDbfsAfter": -1 },
+  "scenes": [ { "sceneId": "ep01.s01", "title": "Opening", "startMs": 1500, "endMs": 11194 } ],
+  "segments": [ { "index": 2, "segmentId": "ep01.s01.p002", "sceneId": "ep01.s01", "sceneTitle": "Opening", "speaker": "Narrator",
+                  "voiceId": "bm_george", "text": "What if we just wrote our own?", "spokenText": "What if we just wrote our own?",
+                  "notes": "visual: empty editor window, cursor blinking", "startMs": 8761, "endMs": 11194, "durationMs": 2433,
+                  "startSample": 420528, "endSample": 537312, "takeId": "t2026…", "takeFile": "takes/ep01.s01.p002/t2026….wav", "stale": false } ],
+  "missing": [], "stale": [],
+  "timing": "Segment times are exact sample positions of each approved take in this file (ms = samples / sampleRate). No word-level alignment."
+}
+```
+
 ## Not implemented yet (planned)
 
-Episode/chapter assembly into one WAV with pauses, SRT/VTT subtitles and timing manifests (Phase 4), GPU execution, remote catalog refresh,
-`models remove`, segment split/merge/reorder from the CLI. See docs/design/NOORVOX_DESIGN.md §12 for the target contract.
+GPU execution, remote catalog refresh, `models remove`, segment split/merge/reorder from the CLI, MP3/other codecs, loudness (LUFS)
+normalisation, word-level alignment. See docs/design/NOORVOX_DESIGN.md §12 for the original target contract.

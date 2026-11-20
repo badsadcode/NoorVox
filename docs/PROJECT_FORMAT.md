@@ -63,7 +63,7 @@ Every project has the same three levels. The **kind** (template) only changes la
 ```
 
 - `defaults.model`: `null` means NoorVox's default installed model; or `"kokoro-82m"` / `"kokoro-82m@1.0"`.
-- `pauses` are stored in milliseconds for export assembly (Phase 4). Generation doesn't use them.
+- `pauses` (milliseconds) are used by `export assemble`. Generation doesn't use them. Segment `pauseBeforeMs`/`pauseAfterMs` override the adjacent gap.
 
 ## `scripts/<sectionId>.json`
 
@@ -178,6 +178,11 @@ The original file is copied, read-only, into `references/`.
 Approved takes are copied with id-based names: dialogue uses `<lineId>.wav`, everything else `<nnn>_<segmentId>.wav`. The `clips.json` lists
 `segmentId, sectionId, sceneId, file, durationMs, sampleRate, text, speaker, voiceId, takeId, stale`, plus `missing`, `stale` and `totalDurationMs`.
 Existing files are never overwritten unless asked.
+
+## Assembly output (`*.manifest.json`, `.wav`, `.srt`, `.vtt`)
+
+See `CLI_REFERENCE.md` → `export assemble` and the JSON Schema `docs/schemas/assembly-manifest.schema.json`. Assembly reads approved takes and
+never modifies them.
 
 ## Concurrency and safety
 

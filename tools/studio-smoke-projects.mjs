@@ -100,6 +100,15 @@ try {
     return await new Promise((res) => { const a = new Audio(takes[0].mediaUrl); a.onloadedmetadata = () => res("ok " + a.duration.toFixed(2)); a.onerror = () => res("error " + (a.error && a.error.message)); setTimeout(() => res("timeout"), 8000); });`);
   check("takes play in the workspace", probe.startsWith("ok") && !/Failed to load/.test(toast), `${probe}${toast ? " · toast: " + toast : ""}`);
 
+  // Assemble dialog opens with its options (the native folder picker itself can't be automated).
+  await s.clickText("button", "Assemble…");
+  await s.waitFor(`document.querySelector('[role="dialog"][aria-label="Assemble"]')`, 5000, "assemble dialog");
+  await sleep(400);
+  await s.shot(shots, "14-assemble");
+  check("assemble dialog offers rate, subtitles and normalisation",
+    (await s.js(`return document.querySelectorAll('[aria-label="Assemble"] select option').length;`)) === 3);
+  await s.clickText('[aria-label="Assemble"] button', "Cancel");
+
   const studioWorker = (await s.bridge("workers.list")).workers.find((w) => w.workerId === "studio");
   const exit = await s.close();
   check("studio closes cleanly", exit !== "timeout", `exit ${exit}`);

@@ -1,4 +1,4 @@
-# NoorVox architecture (as implemented, v0.1.0-dev / Phases 1–3)
+# NoorVox architecture (as implemented, v0.1.0-dev / Phases 1–4)
 
 Decisions and measurements: [ADR-0001](adr/0001-kokoro-backend-and-worker-model.md). Target design: [design/NOORVOX_DESIGN.md](design/NOORVOX_DESIGN.md).
 
@@ -69,6 +69,18 @@ dialogs and Create extend. Jobs run in the background (one per project) and push
 played from the virtual host `takes.noorvox.local`, mapped to the open project's `takes` folder. Closing the studio cancels running jobs, which
 become `interrupted` and resumable. `tools/studio-smoke-projects.mjs` exercises the workspace end to end in an isolated home.
 
+## Export (`Core/Export`, `Core/Audio/Pcm.cs`) — Phase 4
+
+| Piece | Responsibility |
+|---|---|
+| `PcmBuffer` | Mono 16-bit WAV ⇄ float samples (export processing only). |
+| `Resampler` | Windowed-sinc (Blackman, 32 zero-crossings, cutoff = min(1, ratio), DC-normalised kernel), parallel per output sample. Tested: exact lengths, 1 kHz stays 1 kHz, level within 1 %, a 15 kHz tone removed when going 48 → 24 kHz. |
+| `Assembler` | Plans the timeline at the takes' native rate (edge / scene / segment gaps, per-segment overrides), copies samples, then optionally resamples and peak-normalises the whole buffer. Writes WAV via temp + move, SRT/VTT, and the manifest (sha256 of the WAV, processing record). Refuses mixed sample rates, missing approvals (unless allowed) and overwriting (unless allowed). |
+| `Subtitles` | Segment-level SRT/VTT; wraps long text, never re-times it; VTT escapes `<`, `>`, `&` and uses `<v Speaker>` for dialogue. |
+
+Studio: `projects.assemble` (checks approvals before the folder dialog, so the user isn't sent through a picker for nothing) and
+`projects.revealOutput`, which only opens folders containing a NoorVox manifest or `clips.json`.
+
 ## Storage (`Core/Storage`)
 
 `StorageContext.Load()` resolves the home: `NOORVOX_HOME` → portable marker (`noorvox.portable` next to the exe → `.\data`) → `%APPDATA%\NoorVox`.
@@ -119,7 +131,7 @@ and provenance (text sha256, voice, speed, model sha256, backend, worker, timing
 - CPU only. DirectML fails on Kokoro's ConvTranspose; CUDA is untested (needs CUDA 12 + cuDNN 9).
 - Synthesis can't be cancelled mid-job (a KokoroSharp limitation): cancel = force-stop or recycle the worker.
 - Output is not bit-reproducible run to run, so take identity uses inputs, not audio hashes.
-- No single-file episode assembly, subtitles or timing manifests yet (Phase 4). Segment split/merge and drag reordering aren't implemented.
+- Assembly output is WAV only (no MP3/AAC) and normalisation is peak-based, not LUFS. Segment split/merge and drag reordering aren't implemented.
 - Very large projects (thousands of segments) load the whole overview at once; list virtualisation is future work.
 - The studio's Export uses a native Save dialog, which the smoke test can't automate. It was verified by hand on 2026-11-20 (WAV + `.noorvox.json` written to Exports); re-check it manually after changes.
 - The catalog is embedded; remote catalog refresh (for new models/voice packs without an app update) is planned.

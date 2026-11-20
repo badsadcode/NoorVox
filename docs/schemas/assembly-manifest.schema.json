@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/badsadcode/NoorVox/docs/schemas/assembly-manifest.schema.json",
+  "title": "NoorVox assembly manifest",
+  "description": "Written next to an assembled section WAV by `noorvox export assemble` / NoorVox Studio. All times are measured from the written audio (ms = samples / sampleRate). Segment-level timing only; no word alignment.",
+  "type": "object",
+  "required": ["schemaVersion", "kind", "generator", "createdAt", "project", "section", "audio", "pauses", "processing", "scenes", "segments", "missing", "stale", "timing"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "kind": { "const": "noorvox.assembly" },
+    "generator": { "type": "string", "description": "e.g. \"NoorVox 0.1.0-dev\"" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "project": {
+      "type": "object",
+      "required": ["projectId", "title", "kind", "root"],
+      "properties": {
+        "projectId": { "type": "string" },
+        "title": { "type": "string" },
+        "kind": { "enum": ["documentary", "audiobook", "dialogue", "narration", "education", "custom"] },
+        "root": { "type": "string", "description": "Absolute path of the project folder." }
+      }
+    },
+    "section": {
+      "type": "object",
+      "required": ["sectionId", "title"],
+      "properties": { "sectionId": { "type": "string" }, "title": { "type": "string" } }
+    },
+    "audio": {
+      "type": "object",
+      "required": ["file", "sampleRate", "channels", "bitsPerSample", "samples", "durationMs", "bytes", "sha256"],
+      "properties": {
+        "file": { "type": "string", "description": "Absolute path of the assembled WAV (PCM)." },
+        "sampleRate": { "type": "integer" },
+        "channels": { "const": 1 },
+        "bitsPerSample": { "const": 16 },
+        "samples": { "type": "integer" },
+        "durationMs": { "type": "integer" },
+        "bytes": { "type": "integer" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "subtitles": {
+      "type": ["object", "null"],
+      "required": ["srt", "vtt", "granularity"],
+      "properties": {
+        "srt": { "type": "string" },
+        "vtt": { "type": "string" },
+        "granularity": { "const": "segment" }
+      }
+    },
+    "pauses": {
+      "type": "object",
+      "required": ["betweenSegmentsMs", "betweenScenesMs", "sectionEdgeMs", "rule"],
+      "properties": {
+        "betweenSegmentsMs": { "type": "integer" },
+        "betweenScenesMs": { "type": "integer" },
+        "sectionEdgeMs": { "type": "integer" },
+        "rule": { "type": "string" }
+      }
+    },
+    "processing": {
+      "type": "object",
+      "required": ["sourceSampleRate", "resampled", "resampler", "normalized", "peakDbfsAfter"],
+      "properties": {
+        "sourceSampleRate": { "type": "integer" },
+        "resampled": { "type": "boolean" },
+        "resampler": { "type": "string" },
+        "normalized": { "type": "boolean" },
+        "gainDb": { "type": ["number", "null"] },
+        "peakDbfsAfter": { "type": "number" }
+      }
+    },
+    "scenes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sceneId", "title", "startMs", "endMs"],
+        "properties": {
+          "sceneId": { "type": "string" },
+          "title": { "type": "string" },
+          "startMs": { "type": "integer", "description": "Start of the scene's first segment." },
+          "endMs": { "type": "integer", "description": "End of the scene's last segment." }
+        }
+      }
+    },
+    "segments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["index", "segmentId", "sceneId", "sceneTitle", "voiceId", "text", "spokenText", "startMs", "endMs", "durationMs", "startSample", "endSample", "takeId", "takeFile", "stale"],
+        "properties": {
+          "index": { "type": "integer", "minimum": 1 },
+          "segmentId": { "type": "string", "description": "Stable id, e.g. ep01.s02.p003 or a dialogue line id." },
+          "sceneId": { "type": "string" },
+          "sceneTitle": { "type": "string" },
+          "speaker": { "type": ["string", "null"] },
+          "voiceId": { "type": "string" },
+          "text": { "type": "string", "description": "Script text (what subtitles show)." },
+          "spokenText": { "type": "string", "description": "Text sent to the engine after pronunciation rules." },
+          "notes": { "type": ["string", "null"], "description": "Editorial / visual cue notes from the script. Never spoken. Use for B-roll and cuts." },
+          "startMs": { "type": "integer" },
+          "endMs": { "type": "integer" },
+          "durationMs": { "type": "integer" },
+          "startSample": { "type": "integer", "description": "At audio.sampleRate." },
+          "endSample": { "type": "integer" },
+          "takeId": { "type": "string" },
+          "takeFile": { "type": "string", "description": "Project-relative path of the approved take used." },
+          "stale": { "type": "boolean", "description": "true = the approved take no longer matches the current text/voice/speed." }
+        }
+      }
+    },
+    "missing": { "type": "array", "items": { "type": "string" }, "description": "Segments left out because they had no approved take (only with --allow-missing)." },
+    "stale": { "type": "array", "items": { "type": "string" } },
+    "timing": { "type": "string" }
+  }
+}

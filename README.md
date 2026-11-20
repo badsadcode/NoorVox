@@ -5,9 +5,9 @@
 NoorVox is a local voiceover studio for Windows: documentary narration, audiobooks, game dialogue, tutorials and quick voiceovers,
 generated **offline** with the Kokoro-82M model. It has no accounts, no paid API, and no cloud.
 
-**Status: v0.1.0-dev — Phase 3.** A headless CLI plus NoorVox Studio (WPF + WebView2 + React): projects for documentaries,
-audiobooks and game dialogue (import, takes, approvals, resumable batch generation, clip export), Quick Narration, model and voice
-management, and a truthful runtime monitor. Single-file episode assembly and subtitles are Phase 4.
+**Status: v0.1.0-dev — Phase 4.** A headless CLI plus NoorVox Studio (WPF + WebView2 + React): projects for documentaries,
+audiobooks and game dialogue (import, takes, approvals, resumable batch generation), episode assembly with pauses, SRT/VTT subtitles and
+timing manifests for video, clip export, Quick Narration, model and voice management, and a truthful runtime monitor.
 
 ![NoorVox Studio](docs/screenshots/13-project-takes.png)
 
