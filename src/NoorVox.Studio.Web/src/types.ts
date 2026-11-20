@@ -98,6 +98,7 @@ export interface VoicePackInfo {
 export interface InstalledModelInfo {
   id: string; version: string; reference: string; displayName: string; license: string; licenseUrl: string; source: string;
   origin: string; installedAt: string; path: string; modelSha256: string; sizeBytes: number; voices: number; voicePacks: VoicePackInfo[];
+  customVoices: { voiceId: string; name: string; parts: { voiceId: string; weight: number }[]; createdAt: string }[];
 }
 
 export interface CatalogModelInfo {

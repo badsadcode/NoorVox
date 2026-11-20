@@ -39,6 +39,7 @@ public sealed class StudioApi(MainWindow window, JobObject job, BridgeHost bridg
         "models.verify" => await ModelsVerify(Arg<IdArgs>(p), ct),
         "voices.list" => VoicesList(),
         "voices.installPack" => await VoicePackInstall(Arg<IdArgs>(p), ct),
+        "voices.blend" => VoiceBlend(Arg<BlendArgs>(p)),
         "workers.list" => await WorkersList(ct),
         "workers.start" => await WorkersStart(ct),
         "workers.unload" => await WorkersUnload(Arg<WorkerArgs>(p), ct),
@@ -66,6 +67,7 @@ public sealed class StudioApi(MainWindow window, JobObject job, BridgeHost bridg
     public sealed record PathArgs(string Path);
     public sealed record SettingsArgs(string? Theme, bool? StopOnExit, int? IdleTimeoutSeconds, string? DefaultVoice);
     public sealed record UrlArgs(string Url);
+    public sealed record BlendArgs(string Name, List<BlendPart> Parts);
 
     static T Arg<T>(JsonElement? p) where T : class =>
         (p is { ValueKind: JsonValueKind.Object } e ? e.Deserialize<T>(Json.Compact) : null)
@@ -219,6 +221,9 @@ public sealed class StudioApi(MainWindow window, JobObject job, BridgeHost bridg
                 installedAt = m.Manifest.InstalledAt, path = m.Directory, modelSha256 = m.ModelSha256,
                 sizeBytes = m.Manifest.Files.Sum(f => f.Size) + m.VoicePacks.Sum(p => p.Files.Sum(f => f.Size)),
                 voices = m.Voices.Count,
+                customVoices = m.Voices.Where(v => v.PackId == VoiceBlender.CustomPackId)
+                    .Select(v => VoiceBlender.Recipe(m, v.VoiceId)).Where(r => r is not null)
+                    .Select(r => new { r!.VoiceId, r.Name, r.Parts, r.CreatedAt }),
                 voicePacks = catalog.VoicePacksFor(m.Id, m.Version).Select(p => new
                 {
                     id = p.Id, version = p.Version, displayName = p.DisplayName, description = p.Description, voices = p.Files.Count,
@@ -276,6 +281,12 @@ public sealed class StudioApi(MainWindow window, JobObject job, BridgeHost bridg
         bridge.Emit("install.progress", new { target = m.Reference, stage = "done" });
         return result;
     }, ct);
+
+    static object VoiceBlend(BlendArgs a)
+    {
+        var model = new ModelRegistry(S()).Resolve(null);
+        return VoiceBlender.Blend(model, a.Name, a.Parts);
+    }
 
     static object VoicesList()
     {

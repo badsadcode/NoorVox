@@ -109,6 +109,57 @@ public static class ProjectCommands
             $"Duplicated to {copy.Root} as '{copy.Project.Title}'.");
     }, ctx.Ct);
 
+    public static Task<CommandResult> Split(CommandContext ctx)
+    {
+        var p = Open(ctx);
+        var segId = ctx.Args.Require("segment");
+        int at;
+        if (ctx.Args.Get("before") is { Length: > 0 } before)
+        {
+            at = p.Find(segId).Segment.Text.IndexOf(before, StringComparison.Ordinal);
+            if (at < 0) throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, $"'{before}' doesn't occur in {segId}.");
+        }
+        else at = ctx.Args.GetInt("at", -1);
+        var (first, second) = p.SplitSegment(segId, at);
+        return Task.FromResult(new CommandResult(new { first, second }, $"Split {first.SegmentId}; the second part is {second.SegmentId}."));
+    }
+
+    public static Task<CommandResult> Merge(CommandContext ctx)
+    {
+        var p = Open(ctx);
+        var merged = p.MergeWithNext(ctx.Args.Require("segment"));
+        return Task.FromResult(new CommandResult(merged, $"Merged into {merged.SegmentId}."));
+    }
+
+    public static Task<CommandResult> PronunciationList(CommandContext ctx)
+    {
+        var p = Open(ctx);
+        var rules = p.Pronunciation().Rules;
+        return Task.FromResult(new CommandResult(new { rules }, $"{rules.Count} rule(s)."));
+    }
+
+    public static Task<CommandResult> PronunciationSet(CommandContext ctx)
+    {
+        var p = Open(ctx);
+        var match = ctx.Args.Require("match");
+        var rules = p.Pronunciation().Rules.Where(r => !r.Match.Equals(match, StringComparison.OrdinalIgnoreCase)).ToList();
+        rules.Add(new PronunciationRule { Match = match, Replace = ctx.Args.Get("replace") ?? "", WholeWord = !ctx.Args.Has("partial"), CaseSensitive = ctx.Args.Has("case-sensitive") });
+        int changed = p.SavePronunciation(rules);
+        return Task.FromResult(new CommandResult(new { rules, segmentsChanged = changed },
+            $"Saved. {changed} segment(s) will be spoken differently (approved ones now show as changed)."));
+    }
+
+    public static Task<CommandResult> PronunciationRemove(CommandContext ctx)
+    {
+        var p = Open(ctx);
+        var match = ctx.Args.Require("match");
+        var rules = p.Pronunciation().Rules;
+        var kept = rules.Where(r => !r.Match.Equals(match, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (kept.Count == rules.Count) throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, $"No rule for '{match}'.");
+        int changed = p.SavePronunciation(kept);
+        return Task.FromResult(new CommandResult(new { rules = kept, segmentsChanged = changed }, $"Removed. {changed} segment(s) affected."));
+    }
+
     public static Task<CommandResult> Cast(CommandContext ctx)
     {
         var s = Storage();

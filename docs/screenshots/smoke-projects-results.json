@@ -1,5 +1,5 @@
 {
-  "when": "2026-11-20T17:43:20.405Z",
+  "when": "2026-11-20T17:49:41.559Z",
   "results": [
     {
       "name": "projects page lists the project",
@@ -47,7 +47,27 @@
       "detail": "ok 4.97"
     },
     {
+      "name": "pronunciation rule changes spoken text and marks the segment changed",
+      "ok": true,
+      "detail": "The first spark of Noor Engine. · stale"
+    },
+    {
+      "name": "split at cursor creates a new segment after it",
+      "ok": true,
+      "detail": "It started, as so many terrible ideas do, with a single image. | A window, a Vulkan device, and a triangle. Nothing more. No terrain, no trees, no Alden. | It wasn't beautiful. | It wasn't even a game yet. But it was real."
+    },
+    {
+      "name": "merge joins it back",
+      "ok": true,
+      "detail": ""
+    },
+    {
       "name": "assemble dialog offers rate, subtitles and normalisation",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "blend dialog lists voices and shows weights",
       "ok": true,
       "detail": ""
     },
@@ -59,7 +79,7 @@
     {
       "name": "no worker left after close",
       "ok": true,
-      "detail": "worker pid 33000"
+      "detail": "worker pid 44944"
     }
   ]
 }

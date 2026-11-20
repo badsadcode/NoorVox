@@ -1,7 +1,7 @@
 # NoorVox CLI reference
 
 `noorvox.exe` is the headless interface to NoorVox. It never starts WebView2, and it never prompts.
-This document covers **what is implemented in NoorVox 0.1.0**. Anything not listed here does not exist yet.
+This document covers **what is implemented in NoorVox 0.2.0**. Anything not listed here does not exist yet.
 
 - Machine-readable help: `noorvox --help --json` (commands, options, exit codes).
 - Contract version: envelope `schemaVersion: 1`.
@@ -25,7 +25,7 @@ This document covers **what is implemented in NoorVox 0.1.0**. Anything not list
 {
   "schemaVersion": 1,
   "tool": "noorvox",
-  "toolVersion": "0.1.0",
+  "toolVersion": "0.2.0",
   "command": "synth",
   "success": true,
   "code": "ok",
@@ -113,6 +113,15 @@ No worker is needed.
 
 ### `noorvox voices packs [--model REF]`
 Lists the voice packs available for a model, with `installed`, `voices` (count) and `downloadBytes`.
+
+### `noorvox voices blend --name NAME --mix ID:WEIGHT,ID:WEIGHT[,…] [--model REF]`
+Creates a new voice as a weighted average of 2–4 installed voices, e.g. `--mix bm_george:0.6,bm_fable:0.4`. Weights are normalised.
+- The voice id is `<dominant voice's language+gender prefix>_<name letters/digits>` (e.g. `bm_documentarynarrator`). The dominant voice decides the language.
+- It's saved as `voices/<id>.npy` in the model folder, with its recipe in `voices/<id>.blend.json`, and registered (with sha256) in the model's local
+  `custom-voices` pack. From then on it works everywhere a voice id is accepted.
+- Blends are **immutable**: an existing id is refused (`output_exists`, exit 9), because takes are matched by voice id. Create a new name instead.
+
+`data`: `voiceId, name, path, sha256, parts[] {voiceId, weight}, language`.
 
 ### `noorvox voices install <pack-id[@version]> [--model REF]`
 Downloads, verifies and installs a voice pack into an installed model. It uses the same staging and verification as `models install`.
@@ -209,6 +218,25 @@ Changes the title in `noorvox.project.json`. The folder isn't renamed.
 ### `noorvox projects duplicate --project DIR --path NEWDIR [--title TITLE]`
 Copies scripts, takes (so approvals stay valid), references and pronunciation to an empty `NEWDIR`, with a new `projectId`.
 The title defaults to "<title> (copy)". Job history, locks, temp audio and `exports\` aren't copied. `data`: `root`, `projectId`, `title`.
+
+### `noorvox projects split --project DIR --segment ID (--at INDEX | --before TEXT)`
+Splits a segment at a character index, or before the first occurrence of `TEXT`. The first part keeps the id and its approval pointer (now
+`stale`, since its text changed); the second part becomes a new segment right after it (same speaker/voice/speed, no takes) and inherits
+`pauseAfterMs`. `data`: `first`, `second` (segments).
+
+### `noorvox projects merge --project DIR --segment ID`
+Appends the next segment of the **same scene** (same speaker) and removes it from the script. Its take files stay on disk.
+Notes are joined. `data`: the merged segment.
+
+### `noorvox pronunciation list --project DIR`
+The rules in `voices\pronunciation.json`: `match, replace, wholeWord, caseSensitive`.
+
+### `noorvox pronunciation set --project DIR --match WORD --replace TEXT [--case-sensitive] [--partial]`
+Adds or replaces the rule for `WORD` (whole words and case-insensitive by default; `--partial` also matches inside words).
+`data.segmentsChanged` counts segments whose spoken text changes. Approved ones among them become `stale`.
+
+### `noorvox pronunciation remove --project DIR --match WORD`
+Removes the rule (exit 2 if there is none).
 
 ### `noorvox projects cast --project DIR [--speaker ID] --voice ID [--speed X]`
 Without `--speaker`, sets the project default voice (and speed). With `--speaker`, sets that character's voice. Approved takes are untouched;

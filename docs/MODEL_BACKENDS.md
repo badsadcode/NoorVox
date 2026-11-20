@@ -23,7 +23,7 @@ What NoorVox can run, what each backend really supports, where its files live, a
 |---|---|---|
 | Voice | yes | any installed voice id |
 | Speed | yes | 0.5–2.0 |
-| Voice mixing | library supports it | not exposed in the UI/CLI yet |
+| Voice mixing | yes (0.2.0) | `voices blend` / Blend voices…: weighted average of 2–4 voices, saved as an immutable custom voice |
 | Pitch, emotion, style | **no** | not controls in Kokoro, so NoorVox doesn't show them |
 | Loudness | export only | peak normalisation in `export assemble` |
 | Phoneme timestamps | library supports it | not used: subtitles are segment-level |
@@ -52,6 +52,8 @@ Not supported in 0.1.0, and reported as "unavailable" everywhere:
   noorvox.model.json            model manifest (written last = install complete)
   voices\af_heart.npy …         54 voices
   voicepacks\kokoro-82m-v1.0-voices.json
+  voicepacks\custom-voices.json  your blends (sha256 listed, verified like official voices)
+  voices\<id>.blend.json         recipe of each blend
 ```
 
 - Install: `noorvox models install kokoro-82m` or the studio's first run / Models page. Download → `<cache>\staging` → sha256 check → move.

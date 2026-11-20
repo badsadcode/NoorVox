@@ -4,7 +4,7 @@ import { Progress } from "../components/Common";
 import { Check, Download, Folder, Shield, Spinner } from "../components/Icons";
 import { fmtBytes, shortHash } from "../format";
 import { useStudio } from "../studio";
-import type { InstallProgress, ModelsOverview } from "../types";
+import type { InstallProgress, ModelsOverview, VoicesResponse } from "../types";
 
 export function useInstall(onDone: () => void) {
   const { notify, refreshInfo } = useStudio();
@@ -61,6 +61,7 @@ export function Models() {
   };
   const openUrl = (url: string) => call("shell.openUrl", { url }).catch((e) => notify(errorText(e), true));
   const notInstalled = data?.catalog.filter((c) => !c.installed) ?? [];
+  const [blending, setBlending] = useState(false);
 
   return (
     <>
@@ -121,10 +122,27 @@ export function Models() {
                   {m.voicePacks.length === 0 && <span className="muted small">No additional voice packs are available for this model yet.</span>}
                 </div>
               </div>
+              <div>
+                <div className="row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
+                  <label className="field" style={{ margin: 0 }}>My blended voices</label>
+                  <button className="btn small" onClick={() => setBlending(true)}>＋ Blend voices…</button>
+                </div>
+                {m.customVoices.length === 0 && <span className="muted small">Mix 2–4 voices into a new one, e.g. 60 % George + 40 % Fable. It appears in every voice list.</span>}
+                <div className="stack" style={{ gap: 6 }}>
+                  {m.customVoices.map((c) => (
+                    <div key={c.voiceId} className="pack">
+                      <div><b>{c.name}</b> <span className="mono muted small">{c.voiceId}</span>
+                        <div className="muted small">{c.parts.map((p) => `${Math.round(p.weight * 100)} % ${p.voiceId}`).join(" + ")}</div></div>
+                      <span className="pill accent">blend</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </section>
           );
         })}
 
+        {blending && <BlendDialog onClose={() => setBlending(false)} onCreated={() => { setBlending(false); load(); }} />}
         {notInstalled.length > 0 && <h2 style={{ fontSize: 16, margin: "8px 0 0" }}>Available to install</h2>}
         {notInstalled.map((c) => (
           <section key={`${c.id}@${c.version}`} className="panel model-card">
@@ -145,5 +163,56 @@ export function Models() {
         {data && <p className="muted small">Catalog {data.catalogVersion}. NoorVox never re-downloads installed files, and new versions install alongside old ones so earlier takes stay reproducible.</p>}
       </div>
     </>
+  );
+}
+
+function BlendDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { notify } = useStudio();
+  const [voices, setVoices] = useState<VoicesResponse | null>(null);
+  const [name, setName] = useState("");
+  const [parts, setParts] = useState<{ voiceId: string; weight: number }[]>([{ voiceId: "bm_george", weight: 60 }, { voiceId: "bm_fable", weight: 40 }]);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { call<VoicesResponse>("voices.list").then(setVoices, () => undefined); }, []);
+  const total = parts.reduce((a, p) => a + p.weight, 0);
+  const set = (i: number, patch: Partial<{ voiceId: string; weight: number }>) => setParts((ps) => ps.map((p, j) => (j === i ? { ...p, ...patch } : p)));
+
+  const create = async () => {
+    setBusy(true);
+    try {
+      const r = await call<{ voiceId: string; name: string }>("voices.blend", { name, parts: parts.map((p) => ({ voiceId: p.voiceId, weight: p.weight })) });
+      notify(`Created “${r.name}” (${r.voiceId}). Try it in Quick narration.`);
+      onCreated();
+    } catch (e) { notify(errorText(e), true); } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="overlay" role="dialog" aria-modal="true" aria-label="Blend voices">
+      <div className="modal" style={{ width: "min(560px, 100%)" }}>
+        <h3>Blend voices</h3>
+        <p className="muted" style={{ marginTop: 0 }}>
+          A weighted mix of Kokoro voices becomes a new voice. The strongest voice decides the language. Blends can't be changed later
+          (takes rely on them), so experiment with new names.
+        </p>
+        <label className="field" htmlFor="bname">Name</label>
+        <input id="bname" type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Documentary Narrator" autoFocus />
+        <div className="stack" style={{ gap: 8, marginTop: 12 }}>
+          {parts.map((p, i) => (
+            <div key={i} className="row" style={{ flexWrap: "nowrap" }}>
+              <select value={p.voiceId} aria-label={`Voice ${i + 1}`} onChange={(e) => set(i, { voiceId: e.target.value })} style={{ flex: 1 }}>
+                {voices?.voices.map((v) => <option key={v.id} value={v.id}>{v.displayName} · {v.languageName} · {v.gender}</option>)}
+              </select>
+              <input type="range" min={5} max={100} step={5} value={p.weight} aria-label={`Weight of voice ${i + 1}`} onChange={(e) => set(i, { weight: Number(e.target.value) })} style={{ width: 120 }} />
+              <span className="mono small" style={{ width: 44, textAlign: "right" }}>{total ? Math.round((p.weight * 100) / total) : 0} %</span>
+              {parts.length > 2 && <button className="btn small ghost" aria-label="Remove voice" onClick={() => setParts((ps) => ps.filter((_, j) => j !== i))}>✕</button>}
+            </div>
+          ))}
+          {parts.length < 4 && <button className="btn small" style={{ alignSelf: "flex-start" }} onClick={() => setParts((ps) => [...ps, { voiceId: voices?.voices[0]?.id ?? "af_heart", weight: 25 }])}>＋ Add voice</button>}
+        </div>
+        <div className="row" style={{ justifyContent: "flex-end", marginTop: 18 }}>
+          <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="btn primary" onClick={create} disabled={busy || !name.trim()}>Create voice</button>
+        </div>
+      </div>
+    </div>
   );
 }

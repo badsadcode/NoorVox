@@ -38,6 +38,8 @@ public sealed class ProjectsApi(MainWindow window, JobObject job, BridgeHost bri
     public sealed record ApproveArgs(string Path, string SegmentId, string? TakeId);
     public sealed record ExportArgs(string Path, string? SectionId, bool AllowMissing);
     public sealed record RenameArgs(string Path, string Title);
+    public sealed record SplitArgs(string Path, string SegmentId, int At);
+    public sealed record PronunciationArgs(string Path, List<PronunciationRule> Rules);
     public sealed record AssembleArgs(string Path, string? SectionId, int? Rate, bool Normalize, bool Subtitles, bool AllowMissing);
 
     public async Task<object?> InvokeAsync(string method, JsonElement? p, CancellationToken ct) => method switch
@@ -48,6 +50,10 @@ public sealed class ProjectsApi(MainWindow window, JobObject job, BridgeHost bri
         "projects.openDialog" => await OpenDialog(),
         "projects.forget" => Forget(Arg<PathArgs>(p)),
         "projects.rename" => Rename(Arg<RenameArgs>(p)),
+        "projects.split" => SplitSegment(Arg<SplitArgs>(p)),
+        "projects.merge" => MergeSegment(Arg<SegmentArgs>(p)),
+        "projects.pronunciation" => OpenAllowed(Arg<PathArgs>(p).Path).Pronunciation(),
+        "projects.setPronunciation" => SetPronunciation(Arg<PronunciationArgs>(p)),
         "projects.duplicate" => await DuplicateProject(Arg<PathArgs>(p)),
         "projects.overview" => Overview(Arg<PathArgs>(p), remap: true),
         "projects.import" => await Import(Arg<PathArgs>(p)),
@@ -131,6 +137,21 @@ public sealed class ProjectsApi(MainWindow window, JobObject job, BridgeHost bri
         var store = ProjectStore.Create(dir, a.Title, a.Kind, string.IsNullOrWhiteSpace(a.Voice) ? null : a.Voice);
         Remember(store.Root);
         return new { cancelled = false, path = store.Root };
+    }
+
+    static object SplitSegment(SplitArgs a)
+    {
+        var (first, second) = OpenAllowed(a.Path).SplitSegment(a.SegmentId, a.At);
+        return new { first = first.SegmentId, second = second.SegmentId };
+    }
+
+    static object MergeSegment(SegmentArgs a) => new { merged = OpenAllowed(a.Path).MergeWithNext(a.SegmentId).SegmentId };
+
+    static object SetPronunciation(PronunciationArgs a)
+    {
+        var p = OpenAllowed(a.Path);
+        int changed = p.SavePronunciation(a.Rules);
+        return new { rules = p.Pronunciation().Rules, segmentsChanged = changed };
     }
 
     static object Rename(RenameArgs a)

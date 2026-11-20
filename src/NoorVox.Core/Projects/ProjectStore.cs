@@ -289,6 +289,80 @@ public sealed partial class ProjectStore
         });
     }
 
+    /// <summary>
+    /// Splits a segment at a character position. The first part keeps the id (and its approval, which becomes stale because the
+    /// text changed); the second part becomes a new segment right after it, with the same speaker/voice/speed and no takes.
+    /// </summary>
+    public (Segment First, Segment Second) SplitSegment(string segmentId, int at)
+    {
+        var loc = Find(segmentId);
+        var text = loc.Segment.Text;
+        if (at <= 0 || at >= text.Length || text[..at].Trim().Length == 0 || text[at..].Trim().Length == 0)
+            throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "Split position must leave text on both sides.");
+        var ids = AllSegmentIds();
+        return MutateSection(loc.Section.SectionId, f =>
+        {
+            var scene = f.Scenes.First(s => s.SceneId == loc.Scene.SceneId);
+            int index = scene.Segments.FindIndex(s => s.SegmentId == segmentId);
+            var first = scene.Segments[index];
+            int n = scene.Segments.Count + 1;
+            string id;
+            do id = $"{scene.SceneId}.p{n++:000}"; while (ids.Contains(id));
+            var second = new Segment
+            {
+                SegmentId = id, Text = first.Text[at..].Trim(), SpeakerId = first.SpeakerId, VoiceId = first.VoiceId, Speed = first.Speed,
+                PauseAfterMs = first.PauseAfterMs,
+            };
+            first.Text = first.Text[..at].Trim();
+            first.PauseAfterMs = null;
+            scene.Segments.Insert(index + 1, second);
+            return (first, second);
+        });
+    }
+
+    /// <summary>
+    /// Appends the next segment of the same scene to this one and removes it from the script (its take files stay on disk).
+    /// The merged segment keeps its id and approval pointer (now stale, since the text changed).
+    /// </summary>
+    public Segment MergeWithNext(string segmentId)
+    {
+        var loc = Find(segmentId);
+        return MutateSection(loc.Section.SectionId, f =>
+        {
+            var scene = f.Scenes.First(s => s.SceneId == loc.Scene.SceneId);
+            int index = scene.Segments.FindIndex(s => s.SegmentId == segmentId);
+            if (index + 1 >= scene.Segments.Count)
+                throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, $"{segmentId} is the last segment of its scene; nothing to merge with.");
+            var a = scene.Segments[index];
+            var b = scene.Segments[index + 1];
+            if (a.SpeakerId != b.SpeakerId)
+                throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "Can't merge segments spoken by different speakers.");
+            a.Text = $"{a.Text.TrimEnd()} {b.Text.TrimStart()}".Trim();
+            a.Notes = string.Join(" · ", new[] { a.Notes, b.Notes }.Where(n => !string.IsNullOrWhiteSpace(n))) is { Length: > 0 } notes ? notes : null;
+            a.PauseAfterMs = b.PauseAfterMs;
+            scene.Segments.RemoveAt(index + 1);
+            return a;
+        });
+    }
+
+    /// <summary>Replaces the pronunciation rules (validated). Returns how many segments' spoken text changes as a result.</summary>
+    public int SavePronunciation(IReadOnlyList<PronunciationRule> rules)
+    {
+        if (rules.Count > 500) throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "At most 500 pronunciation rules.");
+        foreach (var r in rules)
+        {
+            if (string.IsNullOrWhiteSpace(r.Match) || r.Match.Length > 100 || r.Replace.Length > 200)
+                throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "Each rule needs a word (≤100 characters) and a replacement (≤200).");
+        }
+        if (rules.GroupBy(r => r.CaseSensitive ? r.Match : r.Match.ToLowerInvariant()).Any(g => g.Count() > 1))
+            throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "Each word can only have one rule.");
+        var before = Pronunciation();
+        var after = new PronunciationFile { Rules = rules.Select(r => new PronunciationRule { Match = r.Match.Trim(), Replace = r.Replace.Trim(), WholeWord = r.WholeWord, CaseSensitive = r.CaseSensitive }).ToList() };
+        using (WriteLock())
+            FileUtil.WriteAllTextAtomic(Path.Combine(Root, "voices", "pronunciation.json"), Json.Serialize(after));
+        return AllSegments().Count(l => before.Apply(l.Segment.Text) != after.Apply(l.Segment.Text));
+    }
+
     public Segment UpdateSegment(string segmentId, Action<Segment> change)
     {
         var loc = Find(segmentId);

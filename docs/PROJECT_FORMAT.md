@@ -159,7 +159,8 @@ A job is written **before** it runs and after **every** segment:
 { "schemaVersion": 1, "rules": [ { "match": "NoorEngine", "replace": "Noor Engine", "wholeWord": true, "caseSensitive": false } ] }
 ```
 
-These are plain text replacements applied, in order, to produce the spoken text. They're part of the cacheKey, so changing a rule marks affected segments `stale`.
+These are plain text replacements applied, in order, to produce the spoken text. Edit them in the studio (Pronunciation panel) or with
+`noorvox pronunciation set/remove`. They're part of the cacheKey, so changing a rule marks affected segments `stale`.
 Phonetic (IPA) entries are not supported yet.
 
 ## Imports

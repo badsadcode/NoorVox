@@ -4,7 +4,7 @@ import { Confirm, Progress } from "../components/Common";
 import { Alert, Check, Download, Folder, Pause, Play, Refresh, Spinner, Stop, Upload } from "../components/Icons";
 import { fmtDuration, plural } from "../format";
 import { useStudio } from "../studio";
-import type { GenerationJob, JobProgressEvent, ProjectOverview, SegmentStatusId, SegmentView, TakeView, VoicesResponse } from "../types";
+import type { GenerateResponse, GenerationJob, JobProgressEvent, ProjectOverview, SegmentStatusId, SegmentView, TakeView, VoicesResponse } from "../types";
 
 const STATUS: Record<SegmentStatusId, { label: string; cls: string; icon: string; hint: string }> = {
   approved: { label: "Approved", cls: "ok", icon: "✔", hint: "The approved take matches the current text and voice." },
@@ -27,6 +27,7 @@ export function Project() {
   const [playing, setPlaying] = useState<string | null>(null);
   const [confirmExport, setConfirmExport] = useState<{ missing: number; sectionId: string | null } | null>(null);
   const [assembling, setAssembling] = useState(false);
+  const [showKeys, setShowKeys] = useState(false);
   const [lastOutput, setLastOutput] = useState<{ folder: string; summary: string } | null>(null);
   const audio = useRef(new Audio());
   const reloadTimer = useRef<number | undefined>(undefined);
@@ -77,6 +78,17 @@ export function Project() {
   }, [playing, notify]);
 
   const section = useMemo(() => ov?.sections.find((s) => s.scenes.some((x) => x.sceneId === sceneId)), [ov, sceneId]);
+  const allScenes = useMemo(() => ov?.sections.flatMap((s) => s.scenes.map((x) => x.sceneId)) ?? [], [ov]);
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (!e.altKey || (e.key !== "PageDown" && e.key !== "PageUp") || !sceneId) return;
+      e.preventDefault();
+      const i = allScenes.indexOf(sceneId) + (e.key === "PageDown" ? 1 : -1);
+      if (i >= 0 && i < allScenes.length) setSceneId(allScenes[i]);
+    };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [allScenes, sceneId]);
   const scene = section?.scenes.find((x) => x.sceneId === sceneId);
 
   if (!projectPath) {
@@ -153,11 +165,19 @@ export function Project() {
           <button className="btn primary" onClick={() => setAssembling(true)} disabled={approved === 0}><Download size={16} /> Assemble…</button>
           <button className="btn" onClick={() => exportClips(null, false)} disabled={approved === 0}><Download size={16} /> Export clips…</button>
           <button className="btn" onClick={() => call("projects.reveal", { path: ov.root })} aria-label="Open project folder"><Folder size={16} /></button>
+          <button className="btn ghost" onClick={() => setShowKeys((v) => !v)} aria-expanded={showKeys} title="Keyboard shortcuts">⌨</button>
         </div>
       </div>
       <div className="bar" style={{ marginBottom: 14 }} role="progressbar" aria-label="Approved" aria-valuenow={total ? Math.round(approved * 100 / total) : 0}>
         <i style={{ width: `${total ? (approved * 100) / total : 0}%`, background: "var(--ok)" }} />
       </div>
+      {showKeys && (
+        <div className="note" style={{ marginBottom: 12 }}>
+          <b>Keyboard</b> (while editing a segment): <span className="mono">Ctrl+Enter</span> new take · <span className="mono">Ctrl+Space</span> play ·
+          {" "}<span className="mono">Alt+A</span> approve latest take · <span className="mono">Alt+S</span> split at cursor · <span className="mono">Alt+M</span> merge with next ·
+          {" "}anywhere: <span className="mono">Alt+PageDown/PageUp</span> next/previous {ov.kind.sceneLabel.toLowerCase()} · <span className="mono">Tab</span> moves between controls.
+        </div>
+      )}
       {lastOutput && (
         <div className="note" style={{ marginBottom: 12, display: "flex", gap: 10, alignItems: "center" }}>
           <Check size={15} /> <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>Exported {lastOutput.summary} to <span className="mono">{lastOutput.folder}</span></span>
@@ -207,8 +227,8 @@ export function Project() {
                   </div>
                   <span className="muted small">{plural(scene.segments.length, k.segmentLabel)}</span>
                 </div>
-                {scene.segments.map((seg) => (
-                  <SegmentCard key={seg.segmentId} seg={seg} ov={ov} voices={voices} busy={!!running}
+                {scene.segments.map((seg, i) => (
+                  <SegmentCard key={seg.segmentId} seg={seg} ov={ov} voices={voices} busy={!!running} isLast={i === scene.segments.length - 1}
                     playing={playing} onPlay={play} onChanged={reloadSoon}
                     onGenerate={() => generate("scene", "all", false, [seg.segmentId])} />
                 ))}
@@ -223,6 +243,7 @@ export function Project() {
             <GeneratePanel ov={ov} sectionTitle={section?.title} sceneTitle={scene?.title} running={running} status={status}
               onGenerate={generate} onStop={stop} lastJob={lastJob} resumable={running ? undefined : resumable} onResume={resume} />
             <CastPanel ov={ov} voices={voices} onChanged={load} />
+            <PronunciationPanel ov={ov} onChanged={load} onPlay={play} />
           </aside>
         </div>
       )}
@@ -241,8 +262,8 @@ export function Project() {
   );
 }
 
-function SegmentCard({ seg, ov, voices, busy, playing, onPlay, onChanged, onGenerate }: {
-  seg: SegmentView; ov: ProjectOverview; voices: VoicesResponse | null; busy: boolean; playing: string | null;
+function SegmentCard({ seg, ov, voices, busy, isLast, playing, onPlay, onChanged, onGenerate }: {
+  seg: SegmentView; ov: ProjectOverview; voices: VoicesResponse | null; busy: boolean; isLast: boolean; playing: string | null;
   onPlay: (key: string, url: string) => void; onChanged: () => void; onGenerate: () => void;
 }) {
   const { notify } = useStudio();
@@ -252,6 +273,8 @@ function SegmentCard({ seg, ov, voices, busy, playing, onPlay, onChanged, onGene
   const [takes, setTakes] = useState<TakeView[] | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const saveTimer = useRef<number | undefined>(undefined);
+  const area = useRef<HTMLTextAreaElement>(null);
+  const [cursor, setCursor] = useState(0);
   const lastSaved = useRef(seg.text);
 
   useEffect(() => { if (seg.text !== lastSaved.current) { setText(seg.text); lastSaved.current = seg.text; } }, [seg.text]);
@@ -278,6 +301,35 @@ function SegmentCard({ seg, ov, voices, busy, playing, onPlay, onChanged, onGene
     if (text !== lastSaved.current) { lastSaved.current = text; save({ text }); }
   };
 
+  const split = async () => {
+    const at = area.current?.selectionStart ?? cursor;
+    if (at <= 0 || at >= text.length) { notify("Put the cursor where the segment should be split.", true); return; }
+    window.clearTimeout(saveTimer.current);
+    try {
+      if (text !== lastSaved.current) { lastSaved.current = text; await call("projects.updateSegment", { path: ov.root, segmentId: seg.segmentId, text }); }
+      const r = await call<{ first: string; second: string }>("projects.split", { path: ov.root, segmentId: seg.segmentId, at });
+      notify(`Split: the second part is ${r.second}.`); onChanged();
+    } catch (e) { notify(errorText(e), true); }
+  };
+  const merge = async () => {
+    flush();
+    try { await call("projects.merge", { path: ov.root, segmentId: seg.segmentId }); notify("Merged with the next segment. Its takes stay on disk."); onChanged(); }
+    catch (e) { notify(errorText(e), true); }
+  };
+  const approveLatest = async () => {
+    if (!seg.latestTakeId) return;
+    try { await call("projects.approve", { path: ov.root, segmentId: seg.segmentId, takeId: seg.latestTakeId }); onChanged(); notify(`Approved ${seg.latestTakeId}.`); }
+    catch (e) { notify(errorText(e), true); }
+  };
+  const onKeys = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const key = e.key.toLowerCase();
+    if (e.ctrlKey && e.key === "Enter") { e.preventDefault(); flush(); if (!busy) onGenerate(); }
+    else if (e.ctrlKey && e.key === " ") { e.preventDefault(); const t = seg.approvedTakeId ?? seg.latestTakeId; if (t) onPlay(`${seg.segmentId}/${t}`, playUrl(t)); }
+    else if (e.altKey && key === "s") { e.preventDefault(); split(); }
+    else if (e.altKey && key === "m") { e.preventDefault(); if (!isLast) merge(); }
+    else if (e.altKey && key === "a") { e.preventDefault(); approveLatest(); }
+  };
+
   const playUrl = (takeId: string) => `https://takes.noorvox.local/${encodeURIComponent(seg.segmentId)}/${encodeURIComponent(takeId)}.wav`;
   const mainTake = seg.approvedTakeId ?? seg.latestTakeId;
   const st = STATUS[seg.status];
@@ -297,7 +349,8 @@ function SegmentCard({ seg, ov, voices, busy, playing, onPlay, onChanged, onGene
         <span className="muted small">{voiceName} · {seg.effectiveSpeed.toFixed(2)}×</span>
         <span className={`pill ${st.cls}`} title={st.hint} style={{ marginLeft: "auto" }}>{st.icon} {st.label}</span>
       </div>
-      <textarea value={text} onChange={(e) => scheduleSave(e.target.value)} onBlur={flush} rows={Math.min(8, Math.max(2, Math.ceil(text.length / 95)))}
+      <textarea ref={area} value={text} onChange={(e) => scheduleSave(e.target.value)} onBlur={flush} onKeyDown={onKeys}
+        onSelect={(e) => setCursor(e.currentTarget.selectionStart)} rows={Math.min(8, Math.max(2, Math.ceil(text.length / 95)))}
         aria-label={`Text of ${seg.segmentId}`} placeholder="Type what should be spoken…" />
       {seg.notes && <div className="seg-notes">📝 {seg.notes}</div>}
       {seg.spokenText && seg.spokenText !== seg.text && <div className="seg-notes">🔊 Spoken as: {seg.spokenText}</div>}
@@ -310,6 +363,8 @@ function SegmentCard({ seg, ov, voices, busy, playing, onPlay, onChanged, onGene
           <Refresh size={14} /> {seg.takes ? "New take" : "Generate"}
         </button>
         <button className="btn small ghost" onClick={() => setOpen((o) => !o)} aria-expanded={open}>Takes ({seg.takes})</button>
+        <button className="btn small ghost" onClick={split} title="Split at the text cursor (Alt+S)">Split</button>
+        {!isLast && <button className="btn small ghost" onClick={merge} title="Merge with the next segment (Alt+M)">Merge ↓</button>}
         {saving && <span className="muted small"><Spinner size={12} /> saving</span>}
         <button className="btn small ghost danger" style={{ marginLeft: "auto" }} onClick={() => setConfirmDelete(true)} aria-label="Remove segment">Remove</button>
       </div>
@@ -486,5 +541,68 @@ function AssembleDialog({ ov, sectionId, onClose, onDone }: {
         </div>
       </div>
     </div>
+  );
+}
+
+function PronunciationPanel({ ov, onChanged, onPlay }: { ov: ProjectOverview; onChanged: () => void; onPlay: (key: string, url: string) => void }) {
+  const { notify } = useStudio();
+  const [rules, setRules] = useState<{ match: string; replace: string; wholeWord: boolean; caseSensitive: boolean }[] | null>(null);
+  const [match, setMatch] = useState("");
+  const [replace, setReplace] = useState("");
+  const [testing, setTesting] = useState(false);
+  const load = useCallback(() => {
+    call<{ rules: { match: string; replace: string; wholeWord: boolean; caseSensitive: boolean }[] }>("projects.pronunciation", { path: ov.root })
+      .then((r) => setRules(r.rules), (e) => notify(errorText(e), true));
+  }, [ov.root, notify]);
+  useEffect(load, [load]);
+
+  const save = async (next: NonNullable<typeof rules>) => {
+    try {
+      const r = await call<{ segmentsChanged: number }>("projects.setPronunciation", { path: ov.root, rules: next });
+      setRules(next);
+      notify(r.segmentsChanged ? `${r.segmentsChanged} segment(s) will now be spoken differently; regenerate them when ready.` : "Saved.");
+      onChanged();
+    } catch (e) { notify(errorText(e), true); }
+  };
+  const test = async (spoken: string) => {
+    if (!spoken.trim()) return;
+    setTesting(true);
+    try {
+      const voice = ov.project.defaults.voiceId ?? ov.project.speakers.find((s) => s.voiceId)?.voiceId ?? "af_heart";
+      const r = await call<GenerateResponse>("narration.generate", { text: spoken, voice, speed: ov.project.defaults.speed ?? 1 });
+      onPlay(`pron/${r.result.outputPath}`, r.mediaUrl);
+    } catch (e) { notify(errorText(e), true); } finally { setTesting(false); }
+  };
+  const add = () => {
+    if (!match.trim() || !rules) return;
+    const next = [...rules.filter((r) => r.match.toLowerCase() !== match.trim().toLowerCase()), { match: match.trim(), replace: replace.trim(), wholeWord: true, caseSensitive: false }];
+    setMatch(""); setReplace("");
+    save(next);
+  };
+
+  return (
+    <section className="panel" aria-label="Pronunciation">
+      <h2>Pronunciation</h2>
+      <p className="muted small" style={{ marginTop: -4 }}>Write a word the way it should sound. Applies to the whole project; the script text stays as written.</p>
+      <div className="stack" style={{ gap: 6 }}>
+        {rules?.map((r) => (
+          <div key={r.match} className="pron-row">
+            <span className="mono small">{r.match}</span><span className="muted">→</span><span className="small">{r.replace || "(silent)"}</span>
+            <button className="btn small ghost" disabled={testing} onClick={() => test(r.replace)} aria-label={`Hear ${r.match}`}><Play size={12} /></button>
+            <button className="btn small ghost" onClick={() => save(rules.filter((x) => x !== r))} aria-label={`Remove rule for ${r.match}`}>✕</button>
+          </div>
+        ))}
+        {rules?.length === 0 && <span className="muted small">No rules yet. Example: NoorEngine → Noor Engine.</span>}
+      </div>
+      <div className="stack" style={{ gap: 6, marginTop: 10 }}>
+        <input type="text" value={match} onChange={(e) => setMatch(e.target.value)} placeholder="Word in the script, e.g. Vulkan" aria-label="Word" />
+        <input type="text" value={replace} onChange={(e) => setReplace(e.target.value)} placeholder="Say it as, e.g. Vull-can" aria-label="Pronounce as"
+          onKeyDown={(e) => { if (e.key === "Enter") add(); }} />
+        <div className="row">
+          <button className="btn small" disabled={!replace.trim() || testing} onClick={() => test(replace)}>{testing ? <Spinner size={12} /> : <Play size={12} />} Test</button>
+          <button className="btn small primary" disabled={!match.trim()} onClick={add}>Add rule</button>
+        </div>
+      </div>
+    </section>
   );
 }

@@ -38,5 +38,10 @@ public static partial class KokoroVoiceNames
     }
 
     public static IReadOnlyList<VoiceInfo> List(InstalledModel model) =>
-        model.Voices.Select(v => Describe(v.VoiceId, v.PackId)).ToList();
+        model.Voices.Select(v =>
+        {
+            var info = Describe(v.VoiceId, v.PackId);
+            // Blended voices show the name the user gave them.
+            return v.PackId == VoiceBlender.CustomPackId && VoiceBlender.Recipe(model, v.VoiceId) is { } r ? info with { DisplayName = r.Name } : info;
+        }).ToList();
 }

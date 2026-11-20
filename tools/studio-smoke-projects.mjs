@@ -100,6 +100,31 @@ try {
     return await new Promise((res) => { const a = new Audio(takes[0].mediaUrl); a.onloadedmetadata = () => res("ok " + a.duration.toFixed(2)); a.onerror = () => res("error " + (a.error && a.error.message)); setTimeout(() => res("timeout"), 8000); });`);
   check("takes play in the workspace", probe.startsWith("ok") && !/Failed to load/.test(toast), `${probe}${toast ? " · toast: " + toast : ""}`);
 
+  // Pronunciation rule through the UI → spoken text changes, approved segment becomes "changed".
+  const typeInto = (sel, value) => s.js(`const el = document.querySelector(${JSON.stringify(sel)}); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+    set.call(el, ${JSON.stringify(value)}); el.dispatchEvent(new Event("input", { bubbles: true })); return true;`);
+  await typeInto('[aria-label="Pronunciation"] input[aria-label="Word"]', "NoorEngine");
+  await typeInto('[aria-label="Pronunciation"] input[aria-label="Pronounce as"]', "Noor Engine");
+  await s.clickText('[aria-label="Pronunciation"] button', "Add rule");
+  await s.waitFor(`document.querySelector('[aria-label="Pronunciation"] .pron-row')`, 10000, "pronunciation rule");
+  await sleep(1000);
+  const closing = cli("projects", "show", "--project", projectDir, "--segments").sections[0].scenes[2].segments[0];
+  check("pronunciation rule changes spoken text and marks the segment changed", closing.spokenText.includes("Noor Engine") && closing.status === "stale", `${closing.spokenText} · ${closing.status}`);
+
+  // Split at the cursor, then merge back.
+  await s.clickText(".tree-scene", "The First Image");
+  await s.waitFor(`document.querySelector('article.segment[aria-label="ep01.s02.p003"]')`, 10000, "segment p003");
+  await s.js(`const t = document.querySelector('article.segment[aria-label="ep01.s02.p003"] textarea'); const i = t.value.indexOf("It wasn't even"); t.focus(); t.setSelectionRange(i, i);
+    t.dispatchEvent(new Event("select", { bubbles: true })); return true;`);
+  await s.js(`[...document.querySelectorAll('article.segment[aria-label="ep01.s02.p003"] .segment-actions button')].find(b => b.textContent === "Split").click(); return true;`);
+  await s.waitFor(`document.querySelectorAll('.scene article.segment').length === 4`, 10000, "split result");
+  const afterSplit = cli("projects", "show", "--project", projectDir, "--segments").sections[0].scenes[1].segments.map((x) => x.text);
+  check("split at cursor creates a new segment after it", afterSplit.length === 4 && afterSplit[2] === "It wasn't beautiful." && afterSplit[3].startsWith("It wasn't even"), afterSplit.join(" | "));
+  await s.js(`[...document.querySelectorAll('article.segment[aria-label="ep01.s02.p003"] .segment-actions button')].find(b => b.textContent.startsWith("Merge")).click(); return true;`);
+  await s.waitFor(`document.querySelectorAll('.scene article.segment').length === 3`, 10000, "merge result");
+  check("merge joins it back", cli("projects", "show", "--project", projectDir, "--segments").sections[0].scenes[1].segments[2].text === "It wasn't beautiful. It wasn't even a game yet. But it was real.");
+  await s.shot(shots, "15-project-pronunciation");
+
   // Assemble dialog opens with its options (the native folder picker itself can't be automated).
   await s.clickText("button", "Assemble…");
   await s.waitFor(`document.querySelector('[role="dialog"][aria-label="Assemble"]')`, 5000, "assemble dialog");
@@ -108,6 +133,14 @@ try {
   check("assemble dialog offers rate, subtitles and normalisation",
     (await s.js(`return document.querySelectorAll('[aria-label="Assemble"] select option').length;`)) === 3);
   await s.clickText('[aria-label="Assemble"] button', "Cancel");
+
+  // Blend dialog (opened, not submitted: this smoke test uses the real models folder).
+  await s.go("models");
+  await s.clickText("button", "Blend voices");
+  await s.waitFor(`document.querySelector('[aria-label="Blend voices"] select option')`, 10000, "blend dialog");
+  await s.shot(shots, "16-blend-voices");
+  check("blend dialog lists voices and shows weights", (await s.js(`return document.querySelector('[aria-label="Blend voices"]').textContent;`)).includes("%"));
+  await s.clickText('[aria-label="Blend voices"] button', "Cancel");
 
   const studioWorker = (await s.bridge("workers.list")).workers.find((w) => w.workerId === "studio");
   const exit = await s.close();

@@ -68,6 +68,12 @@ public sealed class KokoroBackend : ITtsBackend
         if (_voices.TryGetValue(voiceId, out var cached)) return cached;
         // Only voices declared by an installed voice pack are loadable; the id regex also blocks path tricks.
         var entry = _model!.Voices.FirstOrDefault(v => v.VoiceId == voiceId);
+        if (entry.VoiceId is null && KokoroVoiceNames.IsValidId(voiceId))
+        {
+            // A voice blended after this worker loaded the model: refresh the package's voice list from disk.
+            _model = ModelRegistry.ReadPackage(_model.Directory);
+            entry = _model.Voices.FirstOrDefault(v => v.VoiceId == voiceId);
+        }
         if (!KokoroVoiceNames.IsValidId(voiceId) || entry.VoiceId is null)
             throw new NoorVoxException(ErrorCodes.VoiceNotFound, ExitCode.ModelMissing,
                 $"Voice '{voiceId}' is not installed for {_model.Reference}.", new { voiceId, model = _model.Reference });

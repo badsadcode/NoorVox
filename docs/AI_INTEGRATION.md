@@ -134,6 +134,15 @@ noorvox generate --project $dlg --approve --json --quiet
 noorvox export clips --project $dlg --json --quiet          # -> npc_vendor_greeting_001.wav, … + clips.json
 ```
 
+Fixing pronunciation and segment boundaries headlessly:
+
+```powershell
+noorvox pronunciation set --project $p --match NoorEngine --replace "Noor Engine" --json --quiet   # data.segmentsChanged → regenerate those
+noorvox projects split --project $p --segment ep01.s02.p003 --before "It wasn't even" --json --quiet
+noorvox projects merge --project $p --segment ep01.s02.p003 --json --quiet
+noorvox voices blend --name "Documentary Narrator" --mix bm_george:0.6,bm_fable:0.4 --json --quiet          # → voice bm_documentarynarrator
+```
+
 Rules for agents working with projects:
 
 - **Never overwrite approvals.** `--approve` only fills segments with no approval. To change one, `takes approve --segment ID --take ID`,

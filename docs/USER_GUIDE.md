@@ -1,11 +1,11 @@
-# NoorVox Studio — user guide (0.1.0)
+# NoorVox Studio — user guide (0.2.0)
 
 NoorVox Studio turns text into narration on your own PC. There is no account, cloud or paid credits, and after a one-time model
 download it works offline. All screenshots below are of the real application (captured by `tools/studio-smoke.mjs`).
 
 ## Installing and starting
 
-Extract `NoorVox-0.1.0-win-x64.zip`, right-click **Install.ps1 → Run with PowerShell**, and answer two questions:
+Extract `NoorVox-0.2.0-win-x64.zip`, right-click **Install.ps1 → Run with PowerShell**, and answer two questions:
 - **Install folder:** any drive; C: is fine.
 - **Portable mode:** keeps the settings inside that folder.
 
@@ -53,6 +53,15 @@ Use a project for anything bigger than a quick line: a documentary episode, an a
   - *New takes even if a matching take exists* forces fresh takes.
   - While a job runs you see progress and the current segment, with **Stop after this one** and **Stop now**. Every finished segment is saved immediately.
   - A stopped or crashed job shows **Resume**, which continues where it left off.
+- **Split / Merge ↓** on a segment: put the text cursor where it should break and press **Split** (Alt+S). The first part keeps its approval
+  (marked changed); the second part is new. **Merge ↓** (Alt+M) joins a segment with the next one in the same scene.
+- **Keyboard** (⌨ button in the header lists them): Ctrl+Enter new take · Ctrl+Space play · Alt+A approve latest · Alt+S split ·
+  Alt+M merge · Alt+PageDown/PageUp next/previous scene.
+- **Right, Pronunciation:** type a word as it appears in the script and how it should sound (e.g. *Vulkan → Vull-can*), press **Test** to hear it
+  with the project's voice, then **Add rule**. The script text never changes; segments whose speech changes are marked as changed so you know what to regenerate.
+
+![Pronunciation, split and merge](screenshots/15-project-pronunciation.png)
+
 - **Right, Voice / Cast:** the default voice, and for dialogue one voice per character. Recasting marks affected segments as changed.
 - **Assemble…** joins the approved takes of the current episode/chapter (or all of them) into one WAV with the project's pauses.
   Choose 48 kHz (video), 44.1 kHz or the native 24 kHz, optional SRT/VTT subtitles and peak normalisation (export only).
@@ -88,6 +97,14 @@ Previews are kept in `<Temp>\studio\previews` and removed after 3 days. Export t
 This page shows installed models with their license, source, location, size and sha256, plus their **voice packs**.
 **Install** downloads and verifies a model or voice pack, **Update to x.y** appears when a newer version exists (it installs alongside the old one),
 and **Verify files** re-hashes everything. **Change location…** moves where *new* installs go; existing files are not moved.
+
+### Blended voices
+
+**Models & voices → Blend voices…** mixes 2–4 voices into a new one, for example 60 % George + 40 % Fable for a warmer documentary narrator.
+The new voice appears in every voice list (Quick narration, project cast) under the name you gave it. Blends can't be edited afterwards,
+because existing takes rely on them, so experiment with new names.
+
+![Blend voices](screenshots/16-blend-voices.png)
 
 ## Monitor
 

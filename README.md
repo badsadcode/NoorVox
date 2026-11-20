@@ -5,7 +5,7 @@
 NoorVox is a local voiceover studio for Windows: documentary narration, audiobooks, game dialogue, tutorials and quick voiceovers,
 generated **offline** with the Kokoro-82M model. It has no accounts, no paid API, and no cloud.
 
-**Status: 0.1.0, the first complete release.** A headless CLI plus NoorVox Studio (WPF + WebView2 + React):
+**Status: 0.2.0.** 0.1.0 was the first complete release; 0.2.0 adds voice blending, a pronunciation editor, and segment split/merge with keyboard shortcuts. A headless CLI plus NoorVox Studio (WPF + WebView2 + React):
 - projects for documentaries, audiobooks and game dialogue (import, takes, approvals, resumable batch generation);
 - episode assembly with pauses, SRT/VTT subtitles and timing manifests for video, plus clip export;
 - Quick Narration, model and voice management, a truthful runtime monitor, and a storage audit.
@@ -22,7 +22,7 @@ See [CHANGELOG.md](CHANGELOG.md) for what exists and what is still planned.
 .\tools\publish.ps1 -Output E:\Apps\NoorVox     # add -Zip for a shareable NoorVox-<version>-win-x64.zip
 ```
 
-This produces a self-contained folder (about 240 MB, a 137 MB zip) with **`NoorVoxStudio.exe`** to double-click, plus `noorvox.exe` (CLI), the
+This produces a self-contained folder (about 240 MB, a ~137 MB zip) with **`NoorVoxStudio.exe`** to double-click, plus `noorvox.exe` (CLI), the
 worker and **`Install.ps1` / `Uninstall.ps1`** (per-user install, shortcuts, optional portable mode). No .NET install is needed on the target PC.
 Building it requires the .NET 10 SDK and Node.js.
 

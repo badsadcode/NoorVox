@@ -1,3 +1,16 @@
+# NoorVox release notes
+
+## 0.2.0 — creative tools
+
+- **Voice blending:** your own narrator from 2–4 Kokoro voices (immutable, hashed, usable everywhere).
+- **Pronunciation editor:** with a test button and affected-segment counts.
+- **Segment split/merge and keyboard shortcuts** in the project workspace.
+- Verified: 62 xUnit tests; projects smoke 16/16 including pronunciation, split, merge and the blend dialog in the real studio; a real
+  blend synthesized and verified (`bm_documentarynarrator` = 60 % George + 40 % Fable).
+- Everything below (the 0.1.0 acceptance matrix, benchmarks, limitations) still applies. The known limitation "voice mixing not exposed" is resolved.
+
+---
+
 # NoorVox 0.1.0 — release notes
 
 **Bad Ideas Works · 20 November 2026 · Windows 10/11 x64**

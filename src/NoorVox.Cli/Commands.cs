@@ -267,6 +267,22 @@ public static class Commands
         }, $"{voices.Count} voice(s) for {model.Reference}."));
     }
 
+    public static Task<CommandResult> VoicesBlend(CommandContext ctx)
+    {
+        var s = Storage();
+        var model = new ModelRegistry(s).Resolve(ctx.Args.Get("model"));
+        var parts = ctx.Args.Require("mix").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(p =>
+        {
+            var kv = p.Split(':');
+            if (kv.Length != 2 || !double.TryParse(kv[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var w))
+                throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, $"'{p}' should look like bm_george:0.6");
+            return new BlendPart(kv[0], w);
+        }).ToList();
+        var r = VoiceBlender.Blend(model, ctx.Args.Require("name"), parts);
+        return Task.FromResult(new CommandResult(r, $"Created voice '{r.VoiceId}' ({r.Name}, {r.Language}): " +
+            string.Join(" + ", r.Parts.Select(p => $"{p.Weight * 100:0}% {p.VoiceId}")) + "."));
+    }
+
     public static Task<CommandResult> VoicesPacks(CommandContext ctx)
     {
         var s = Storage();

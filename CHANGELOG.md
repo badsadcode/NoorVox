@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.0 — creative tools (2026-11-20)
+
+### Added
+- **Voice blending:** mix 2–4 Kokoro voices into a new, named, sha256-tracked, immutable voice (`voices blend`, Models → Blend voices…). The worker
+  picks up new blends without a restart. Blends are verified like official voices.
+- **Pronunciation editor:** project panel with rules, ▶ test with the project's voice, and a count of affected segments; `pronunciation list/set/remove`.
+- **Split and merge segments:** at the text cursor or `--at/--before`. Approvals are kept as pointers and go stale when the text changes.
+  `projects split/merge`.
+- **Workspace keyboard shortcuts:** Ctrl+Enter, Ctrl+Space, Alt+A/S/M, Alt+PageDown/PageUp, with a ⌨ cheat sheet.
+- Tests: 62 xUnit (+6); projects smoke 16/16 (pronunciation, split, merge, blend dialog in the real UI).
+
 ## 0.1.0 — Phase 5: polish and delivery (2026-11-20)
 
 First complete release. Full notes, acceptance matrix and benchmarks: docs/RELEASE_NOTES.md.

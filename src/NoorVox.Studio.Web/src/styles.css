@@ -256,3 +256,6 @@ table.audit td { padding: 7px 8px; border-top: 1px solid var(--border); vertical
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
 }
+
+.pron-row { display: grid; grid-template-columns: auto auto minmax(0,1fr) auto auto; gap: 6px; align-items: center; padding: 4px 6px; background: var(--surface-2); border-radius: 7px; }
+.pron-row > span:nth-child(3) { overflow-wrap: anywhere; }
