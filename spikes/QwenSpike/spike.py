@@ -1,4 +1,4 @@
-"""Phase-0-style spike for a Qwen3-TTS backend (see docs/adr/0002-qwen3-tts-backend.md).
+"""Phase-0-style spike for a Qwen3-TTS backend (see docs/adr/0002-qwen3-tts-and-gpu.md).
 
 Measures load time, peak VRAM, synthesis time and real audio duration on this PC.
   python spike.py custom <model_dir> <out_dir>                  # CustomVoice: built-in speaker + style instruction
