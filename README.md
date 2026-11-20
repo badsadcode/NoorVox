@@ -13,7 +13,16 @@ management, and a truthful runtime monitor. Single-file episode assembly and sub
 
 See [CHANGELOG.md](CHANGELOG.md) for what exists and what is still planned.
 
-## Quick start (Studio)
+## Get the app (no development tools needed to run it)
+
+```powershell
+.\tools\publish.ps1 -Output E:\Apps\NoorVox     # add -Zip for a shareable NoorVox-<version>-win-x64.zip
+```
+
+This produces a self-contained folder (about 240 MB) with **`NoorVoxStudio.exe`** to double-click, plus `noorvox.exe` (CLI) and the worker.
+No .NET install is needed on the target PC. Building it requires the .NET 10 SDK and Node.js.
+
+## Quick start (Studio, from source)
 
 ```powershell
 dotnet build NoorVox.sln -c Release          # also builds the React UI (needs Node.js 20+ with npm)
