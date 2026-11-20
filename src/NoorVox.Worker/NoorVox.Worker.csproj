@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Isolated inference worker process. Spawned and supervised by NoorVox.Core's WorkerSupervisor. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>NoorVox.Worker</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\NoorVox.Core\NoorVox.Core.csproj" />
+    <ProjectReference Include="..\NoorVox.Backends.Kokoro\NoorVox.Backends.Kokoro.csproj" />
+  </ItemGroup>
+  <!-- KokoroSharp's buildTransitive target copies its bundled voices (~80 MB) into the output.
+       NoorVox loads voices from the installed model package instead (ADR-0001 decision 8). -->
+  <Target Name="NoorVoxRemoveBundledVoices" AfterTargets="CopyContent">
+    <RemoveDir Directories="$(OutputPath)voices" />
+  </Target>
+</Project>

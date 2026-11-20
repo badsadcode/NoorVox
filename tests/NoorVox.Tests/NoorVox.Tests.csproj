@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.2" />
+    <PackageReference Include="xunit.v3" Version="3.2.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\NoorVox.Core\NoorVox.Core.csproj" />
+    <!-- Referenced so noorvox.exe and NoorVox.Worker.exe are in the test output for process-level tests. -->
+    <ProjectReference Include="..\..\src\NoorVox.Cli\NoorVox.Cli.csproj" />
+  </ItemGroup>
+  <Target Name="NoorVoxRemoveBundledVoices" AfterTargets="CopyContent">
+    <RemoveDir Directories="$(OutputPath)voices" />
+  </Target>
+</Project>

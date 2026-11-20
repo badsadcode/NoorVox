@@ -1,0 +1,175 @@
+# NoorVox CLI reference
+
+`noorvox.exe` is the headless interface to NoorVox. It never starts WebView2, and it never prompts.
+This document covers **what is implemented in v0.1.0-dev (Phase 1)**. Anything not listed here does not exist yet.
+
+- Machine-readable help: `noorvox --help --json` (commands, options, exit codes).
+- Contract version: envelope `schemaVersion: 1`.
+- A test (`DocsContractTests`) fails if a command in the CLI is missing from this file.
+
+## Conventions
+
+| Topic | Behaviour |
+|---|---|
+| `--json` | stdout receives **exactly one** JSON envelope (below). Nothing else is written to stdout. |
+| Progress | Always goes to **stderr**: a live-updating line in a terminal, or a line every ~2 s when redirected. Suppress it with `--quiet`. |
+| `--non-interactive` | Accepted everywhere. The CLI never prompts, so it changes nothing. |
+| Paths | Every returned path is an absolute, resolved path. Relative inputs resolve against the current directory. |
+| Overwrites | `synth` refuses to overwrite an existing file unless you pass `--overwrite` (code `output_exists`). |
+| Decimal numbers | Use `.` (`--speed 1.1`), whatever the Windows locale. |
+| Home / settings | `%APPDATA%\NoorVox\settings.json`. Override with `NOORVOX_HOME=<dir>`, or put a `noorvox.portable` file next to the exe (everything then lives in `.\data`). |
+
+### JSON envelope
+
+```json
+{
+  "schemaVersion": 1,
+  "tool": "noorvox",
+  "toolVersion": "0.1.0-dev",
+  "command": "synth",
+  "success": true,
+  "code": "ok",
+  "message": "Wrote E:\\AI\\NoorVox\\Exports\\line.wav (3.52 s).",
+  "data": { },
+  "warnings": []
+}
+```
+
+On failure: `success: false`, `code` is an error code (below), `message` is readable text, and `data` holds details
+when available (for example a `hint` with the command that fixes the problem). The process exit code is non-zero.
+
+### Exit codes
+
+| Exit | Meaning | Typical `code` values |
+|---:|---|---|
+| 0 | Success | `ok` |
+| 1 | Internal error (bug) | `internal_error` |
+| 2 | Invalid arguments | `invalid_arguments` |
+| 3 | Configuration error | `config_error` |
+| 4 | Model or voice missing | `model_not_installed`, `voice_not_found`, `unknown_model` |
+| 5 | Invalid input text | `invalid_input` |
+| 6 | Worker busy / already running | `worker_busy`, `worker_already_running` |
+| 7 | Worker failure | `worker_start_failed`, `worker_unresponsive`, `worker_stop_timeout`, `worker_error`, `model_load_failed` |
+| 8 | Synthesis failed | `synthesis_failed` |
+| 9 | File system | `io_error`, `permission_denied`, `output_exists` |
+| 10 | Download / verification | `download_failed`, `verification_failed` |
+| 11 | Cancelled (Ctrl+C) | `cancelled` |
+| 12 | Not found | `worker_not_running` |
+
+## Commands
+
+### `noorvox version`
+Also available as `noorvox --version`. `data`: `version`, `schemaVersion`, `runtime`, `os`, `executable`.
+
+### `noorvox doctor`
+Health check. It always exits 0 when it can run. Read `data.healthy` and `data.issues` (each issue includes the command that fixes it).
+`data` also includes `home`, `storage[]`, `backends`, `catalogVersion`, `models[]`, `workerExecutable` and `workers[]`.
+
+### `noorvox storage show`
+Shows the configured and resolved path for each storage class: `models`, `cache`, `temp`, `projects`, `exports`, `webview`.
+For each one it reports `path`, `source` (`configured` / `default…`), `drive`, `exists` and `freeBytes`. It never creates folders.
+
+### `noorvox storage set [--models DIR] [--cache DIR] [--temp DIR] [--projects DIR] [--exports DIR] [--webview DIR]`
+Each path is created, checked by writing a probe file, and saved. Pass the value `default` to reset one path.
+Existing files are **not moved**. C: is allowed.
+
+### `noorvox models list`
+`data.installed[]` lists installed models: `reference`, `path`, `modelSha256`, `license`, `source`, `origin` (`download`/`import`), `voices` (count) and `voicePacks`.
+`data.catalog[]` lists models NoorVox can install, with `downloadBytes`, `installed` and `updateAvailable`.
+
+### `noorvox models install <id[@version]> [--no-voices]`
+Downloads from the catalog URL into `<cache>\staging`, resuming an interrupted download where it left off. It checks the
+size and sha256 of every download and every file, moves the files into `<models>\<id>\<version>\`, and writes the
+manifest last. By default it also installs the model's default voice packs. Running it again on an installed model does nothing
+(`status: alreadyInstalled`, `bytesDownloaded: 0`).
+Example: `noorvox models install kokoro-82m`.
+
+### `noorvox models update [--check]`
+For each installed model id, installs the newest catalog version alongside the existing one, plus any missing default voice packs.
+Old versions are kept, because takes record the model hash they were made with. `--check` only reports what would be installed (`updateAvailable`).
+The v0.1 catalog is embedded in the app; refreshing the catalog from the internet is planned.
+
+### `noorvox models import --from DIR`
+Imports weights that are already on disk. The `*.onnx` file must match a catalog sha256; unknown weights are rejected with `unknown_model`.
+Voice packs found **complete** in `DIR/voices/` are imported as well; incomplete packs are skipped, with a warning. Import uses no network.
+
+### `noorvox models verify [<id[@version]>] [--quick]`
+Re-hashes all files (sha256) of one model or all installed models, including their voice packs. `--quick` checks only that files exist and have the right size.
+Fails with `verification_failed` (exit 10) and per-file problems in `data`.
+
+### `noorvox voices list [--model REF] [--language CODE]`
+Lists installed voices (from the installed voice packs). Each voice has `id` (e.g. `af_heart`), `language` (`en-us`, `en-gb`, `ja`, `zh`, `es`, `fr`, `hi`, `it`, `pt-br`), `languageName`, `gender`, `displayName` and `packId`.
+No worker is needed.
+
+### `noorvox voices packs [--model REF]`
+Lists the voice packs available for a model, with `installed`, `voices` (count) and `downloadBytes`.
+
+### `noorvox voices install <pack-id[@version]> [--model REF]`
+Downloads, verifies and installs a voice pack into an installed model. It uses the same staging and verification as `models install`.
+
+### `noorvox workers list`
+Lists NoorVox-managed workers that are running or broken. Stopped workers are omitted. For each worker it reports:
+
+| Field | Meaning |
+|---|---|
+| `state` | `starting`, `idle` (no model), `loading`, `ready`, `generating`, `stopping`, `error` (process gone without clean shutdown), `unresponsive` (process alive, no IPC answer) |
+| `pid`, `startedAt`, `uptimeSeconds`, `lastHeartbeatAt` | Process facts. `lastHeartbeatAt` is when this call got an answer. |
+| `loadedModel` | `id`, `version`, `modelSha256`, `directory`, `loadedAt`, `loadMs`. `null` = no model loaded. |
+| `currentJob` | The running synthesis (`requestId`, `startedAt`, `textChars`, `voiceId`), or `null`. |
+| `resources` | `workingSetBytes`, `privateBytes`, `cpuTimeMs` (cumulative), `sampledAt`, `source`, `gpu` (always reported honestly: unavailable on CPU) |
+| `boundToLauncher` | `true` = the worker dies automatically with the process that launched it |
+| `idleTimeoutSeconds`, `logPath`, `error` | |
+
+Only processes that NoorVox launched and recorded (PID plus exact start time) are reported or touched.
+
+### `noorvox workers status [--worker ID]`
+Same fields for one worker (default id `default`). A worker that isn't running reports `state: "stopped"` (exit 0).
+
+### `noorvox workers start [--worker ID] [--model REF] [--idle-timeout SECONDS]`
+Starts a **persistent** worker that keeps running after the CLI exits. Without `--model` it starts `idle`; with `--model` it loads the model and returns `ready`.
+It exits by itself after `--idle-timeout` seconds without work (default from settings: 900; `0` = never).
+Starting an id that is already running fails with `worker_already_running` (exit 6); NoorVox never starts duplicates.
+
+### `noorvox workers load [--worker ID] [--model REF]`
+Loads a model into a running worker. If the worker has a different model loaded, it is recycled first.
+
+### `noorvox workers unload [--worker ID]`
+Unloads by **recycling** the worker: a graceful stop, then a fresh process with the same id and no model loaded.
+Unloading inside the same process does not return memory reliably (measured; ADR-0001). `data.status.pid` is the new PID.
+
+### `noorvox workers stop (--worker ID | --all) [--force] [--timeout SECONDS]`
+Graceful by default: the worker finishes its current synthesis, then exits. If it doesn't exit within `--timeout` (default 30 s), the command fails with
+`worker_stop_timeout` and names the active job. Run again with `--force` to terminate the process tree (the interrupted job's output is discarded).
+Stopping a crashed (`error`) worker clears its stale record. `--graceful` is accepted for readability.
+
+### `noorvox synth (--text TEXT | --text-file FILE | --stdin) [options]`
+
+| Option | Default | Notes |
+|---|---|---|
+| `--out FILE.wav` | `<exports>\noorvox_<timestamp>.wav` | Must end in `.wav`. The folder is created if needed. |
+| `--voice ID` | settings → model default (`af_heart`) | Must be installed (`voices list`). |
+| `--speed X` | `1.0` | 0.5 – 2.0. This is the only delivery control Kokoro really supports. |
+| `--model REF` | settings → first installed | `kokoro-82m` or `kokoro-82m@1.0` |
+| `--worker ID` | — | Use this specific worker; it is started (bound to this CLI call) if it isn't running. |
+| `--keep-worker` | off | Leave the worker running afterwards (persistent `default`, with the idle timeout). |
+| `--overwrite` | off | Replace an existing `--out`. |
+| `--manifest` | off | Also write `<out>.noorvox.json` containing the same `data`. |
+
+**How a worker is chosen:**
+1. A running `default` worker that is `ready` with the same model is reused, and left running.
+2. A running `default` worker that is `idle` gets the model loaded, is used, and is left running.
+3. Otherwise a private one-shot worker `synth-<pid>` is started **bound to this CLI process**, used, and stopped.
+   If the CLI is killed, Windows terminates that worker too (Job Object). No orphans.
+
+**Output** (`data`): `outputPath`, `durationMs`, `durationSeconds`, `sampleRate` (24000), `channels` (1), `bitsPerSample` (16),
+`samples`, `bytes`, `text {chars, sha256}`, `voice`, `speed`, `model {id, version, modelSha256, license}`,
+`backend {id, executionProvider}`, `worker {id, reused, startedForRequest, stoppedAfter, stateAfter}`,
+`timings {synthesisMs, totalMs, realTimeFactor}`, `createdAt`, `generator` and, with `--manifest`, `manifestPath`.
+
+Durations are **measured from the written WAV's samples**, never estimated. The file is synthesized into `<temp>\synth`,
+validated as PCM WAV, then moved to `--out`; a failed run leaves no partial file at `--out`.
+
+## Not implemented yet (planned)
+
+Projects (`projects validate`), batch generation (`generate segment/episode`), jobs (`jobs status`), export with subtitles,
+the GUI, GPU execution, remote catalog refresh, `models remove`. See docs/design/NOORVOX_DESIGN.md §12 for the target contract.

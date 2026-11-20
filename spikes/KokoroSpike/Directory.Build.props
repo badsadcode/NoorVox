@@ -1,0 +1,8 @@
+<Project>
+  <!-- Separate obj/bin per ONNX Runtime flavour so CPU and DirectML restores don't collide. -->
+  <PropertyGroup>
+    <Ort Condition="'$(Ort)' == ''">Cpu</Ort>
+    <BaseIntermediateOutputPath>obj\$(Ort)\</BaseIntermediateOutputPath>
+    <BaseOutputPath>bin\$(Ort)\</BaseOutputPath>
+  </PropertyGroup>
+</Project>

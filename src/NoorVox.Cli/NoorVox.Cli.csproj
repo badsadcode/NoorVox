@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Headless CLI: `noorvox.exe`. Never starts WebView2. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>noorvox</AssemblyName>
+    <RootNamespace>NoorVox.Cli</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\NoorVox.Core\NoorVox.Core.csproj" />
+    <!-- Referenced only so NoorVox.Worker.exe lands next to noorvox.exe; the CLI never calls backend code. -->
+    <ProjectReference Include="..\NoorVox.Worker\NoorVox.Worker.csproj" />
+  </ItemGroup>
+  <Target Name="NoorVoxRemoveBundledVoices" AfterTargets="CopyContent">
+    <RemoveDir Directories="$(OutputPath)voices" />
+  </Target>
+</Project>

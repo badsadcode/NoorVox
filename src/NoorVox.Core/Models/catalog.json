@@ -1,0 +1,334 @@
+{
+  "catalogSchemaVersion": 1,
+  "catalogVersion": "2026.11.20",
+  "models": [
+    {
+      "id": "kokoro-82m",
+      "version": "1.0",
+      "displayName": "Kokoro 82M v1.0",
+      "description": "Recommended. Natural English narration plus 8 other languages. Runs well on CPU.",
+      "backend": "kokoro-onnx",
+      "recommended": true,
+      "license": "Apache-2.0",
+      "licenseUrl": "https://huggingface.co/hexgrad/Kokoro-82M",
+      "source": "https://github.com/Lyrcaxis/KokoroSharpBinaries/releases/tag/v2.0.0",
+      "defaultVoice": "af_heart",
+      "sampleRate": 24000,
+      "defaultVoicePacks": [
+        "kokoro-82m-v1.0-voices"
+      ],
+      "downloads": [
+        {
+          "url": "https://github.com/Lyrcaxis/KokoroSharpBinaries/releases/download/v2.0.0/kokoro.onnx",
+          "size": 325508342,
+          "sha256": "0cfd5e79aab70a3d8c1a57dc639835110ddb32c9f5ff4fdd1f4db202ea43bb05",
+          "kind": "file",
+          "target": "kokoro.onnx"
+        }
+      ],
+      "files": [
+        {
+          "path": "kokoro.onnx",
+          "size": 325508342,
+          "sha256": "0cfd5e79aab70a3d8c1a57dc639835110ddb32c9f5ff4fdd1f4db202ea43bb05"
+        }
+      ]
+    }
+  ],
+  "voicePacks": [
+    {
+      "id": "kokoro-82m-v1.0-voices",
+      "version": "1.0",
+      "modelId": "kokoro-82m",
+      "modelVersions": [
+        "1.0"
+      ],
+      "displayName": "Kokoro v1.0 standard voices",
+      "description": "All 54 official Kokoro v1.0 voices: American & British English, Japanese, Mandarin, Spanish, French, Hindi, Italian, Brazilian Portuguese.",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://huggingface.co/hexgrad/Kokoro-82M",
+      "source": "https://github.com/Lyrcaxis/KokoroSharpBinaries/releases/tag/v2.0.0",
+      "downloads": [
+        {
+          "url": "https://github.com/Lyrcaxis/KokoroSharpBinaries/releases/download/v2.0.0/voices.zip",
+          "size": 65813438,
+          "sha256": "313d823ee9ea8828c14b28042b933bbc03955d402afb785cbe0b877827d3ea1d",
+          "kind": "zip",
+          "target": "."
+        }
+      ],
+      "files": [
+        {
+          "path": "voices/af_alloy.npy",
+          "size": 522368,
+          "sha256": "445ae1abcc61bc598e8d5e77cece67d05f905b10c194972acd22a4fbf0e43468"
+        },
+        {
+          "path": "voices/af_aoede.npy",
+          "size": 522368,
+          "sha256": "3b7fbd4d3370e6c230bbc255465e5160c58a3765db3d0ceeb79f4c1a657c78ed"
+        },
+        {
+          "path": "voices/af_bella.npy",
+          "size": 522368,
+          "sha256": "adf92f9d074ce202966ac1aecd25c5f0eb9e8395d8d3ccb519f77ab321c98952"
+        },
+        {
+          "path": "voices/af_heart.npy",
+          "size": 522368,
+          "sha256": "0212418aafafb1e9878f3300787937aa401ac937cff8c0310ffa32963d96c77b"
+        },
+        {
+          "path": "voices/af_jessica.npy",
+          "size": 522368,
+          "sha256": "3d32685d7707c120944446f67642d28af08703bfed674ff179e11f04f7e0dae6"
+        },
+        {
+          "path": "voices/af_kore.npy",
+          "size": 522368,
+          "sha256": "d8b0604fa03e79d6121d93c5e02e05021e20386b8656f95b5d205d6fa1af5be8"
+        },
+        {
+          "path": "voices/af_nicole.npy",
+          "size": 522368,
+          "sha256": "d0c96b799c867a9c03a210f5385353097b0f6ef12f7ab3d777d3227853b129c4"
+        },
+        {
+          "path": "voices/af_nova.npy",
+          "size": 522368,
+          "sha256": "a7ec888221fe372f28324d4926d81cff169682bd458c927a42ea725be234dd21"
+        },
+        {
+          "path": "voices/af_river.npy",
+          "size": 522368,
+          "sha256": "06479b9964156be429103999a3b6f413eebfd469d167ab087456a1935641fc4c"
+        },
+        {
+          "path": "voices/af_sarah.npy",
+          "size": 522368,
+          "sha256": "04c3eff66b437ea6a91f9d8ab170660c67057834553b8a2177bc6ec025ce6025"
+        },
+        {
+          "path": "voices/af_sky.npy",
+          "size": 522368,
+          "sha256": "f0ad8d667e3083ace595b46430a99b2204b33d52175558eb057519ae416f2d18"
+        },
+        {
+          "path": "voices/am_adam.npy",
+          "size": 522368,
+          "sha256": "836a3c058f9397161580bd8c1925fba35c826e8da718da4b82b9fcdeec8ae5a1"
+        },
+        {
+          "path": "voices/am_echo.npy",
+          "size": 522368,
+          "sha256": "29ef1f5a8b486e238d110df57bcc08b43ddbc9a8aa803e30ecb89d03861e9713"
+        },
+        {
+          "path": "voices/am_eric.npy",
+          "size": 522368,
+          "sha256": "6498bf201f0fec7c70ed43faece15040618f2c675cb9a1c780cbcc0acfa4ce07"
+        },
+        {
+          "path": "voices/am_fenrir.npy",
+          "size": 522368,
+          "sha256": "6940b7633234b3bba450d2adc08b2431ce6f7b4b51ad60f588ba197907a005b9"
+        },
+        {
+          "path": "voices/am_liam.npy",
+          "size": 522368,
+          "sha256": "29e7499291d45e522ee52cbbb1fa8924f846d7433b2abe2e256c85d920bd8e04"
+        },
+        {
+          "path": "voices/am_michael.npy",
+          "size": 522368,
+          "sha256": "bbb62b3eae08e060f2fcf972d5434144add02bc5f2cc592403f90cab40ae1f4f"
+        },
+        {
+          "path": "voices/am_onyx.npy",
+          "size": 522368,
+          "sha256": "3f58ca8d3ef6b4b856bf0016b9cef76db459421d91aa0ef7ee436f92569e165e"
+        },
+        {
+          "path": "voices/am_puck.npy",
+          "size": 522368,
+          "sha256": "836a9be38c297f8cae74c32dcfe142c88b5decbce448949db75494cb002a1628"
+        },
+        {
+          "path": "voices/am_santa.npy",
+          "size": 522368,
+          "sha256": "3368b44c6760799bc767cc8653fbde824fa0dfa829c43f4c0ec8b8bad0569de0"
+        },
+        {
+          "path": "voices/bf_alice.npy",
+          "size": 522368,
+          "sha256": "be8e6bde8f2ccce00b8da8615a63ab53480abf4cd3ffc023f33f3a05d2c23755"
+        },
+        {
+          "path": "voices/bf_emma.npy",
+          "size": 522368,
+          "sha256": "806fe5ac92bfd3b393d063e935b0af4b5f45e08c638765725bb60f8097f0f910"
+        },
+        {
+          "path": "voices/bf_isabella.npy",
+          "size": 522368,
+          "sha256": "c8fb97c6bb59c159e6bdb3f10df100b0b14cf34205ef478882f6afa554d51caf"
+        },
+        {
+          "path": "voices/bf_lily.npy",
+          "size": 522368,
+          "sha256": "6a7096cc0c97719e98268e21b09590a114f94730e756d2426b068533faa696e2"
+        },
+        {
+          "path": "voices/bm_daniel.npy",
+          "size": 522368,
+          "sha256": "e0a4dabcc539c02c68198605fb71fa97a73c574c7813e61cf64e47ec1ba5dd15"
+        },
+        {
+          "path": "voices/bm_fable.npy",
+          "size": 522368,
+          "sha256": "343e09d7c16f71ea05ab2595c68b9027f49246383b311c455a35f56223e61c7a"
+        },
+        {
+          "path": "voices/bm_george.npy",
+          "size": 522368,
+          "sha256": "7692b2123ac5c99ffdcb5dfe8ea6e8f3bad7f2ae040ae3bddfc443241b5c5c21"
+        },
+        {
+          "path": "voices/bm_lewis.npy",
+          "size": 522368,
+          "sha256": "1d8385549ec987e3e353f639393f6fc18d288c1cd644d49b6bc5990ecfeef6f0"
+        },
+        {
+          "path": "voices/ef_dora.npy",
+          "size": 522368,
+          "sha256": "c27233cfd5544d48308e30ea86bb6ecde4921bcf33d3ad496fc2931b7700334f"
+        },
+        {
+          "path": "voices/em_alex.npy",
+          "size": 522368,
+          "sha256": "33bb5ce02935cceb8a20be015a659922a9c7b8d98159e840ae08644cb9794d48"
+        },
+        {
+          "path": "voices/em_santa.npy",
+          "size": 522368,
+          "sha256": "30de2aace4dedbf765b07e95543d15efe4915600c19d24867490181f2c070f4f"
+        },
+        {
+          "path": "voices/ff_siwis.npy",
+          "size": 522368,
+          "sha256": "6e5f9fa0d44630071e03ecb56d1a779ca88b9d1ed58b71e65360b375be59edf7"
+        },
+        {
+          "path": "voices/hf_alpha.npy",
+          "size": 522368,
+          "sha256": "1d14b6b3089466b3e8a609965d7b65df455f798c88dcf08a7f6e18eb5620a0ac"
+        },
+        {
+          "path": "voices/hf_beta.npy",
+          "size": 522368,
+          "sha256": "126918c6c7856c2059d9d773717e3196399589509d1dcbbf9fdd02a0ac9e38b8"
+        },
+        {
+          "path": "voices/hm_omega.npy",
+          "size": 522368,
+          "sha256": "0aeaa428c176f42f18087e5d32be7a3d2fcc51341fa9e52d4e02ee9ac6e6bf2a"
+        },
+        {
+          "path": "voices/hm_psi.npy",
+          "size": 522368,
+          "sha256": "611695f1abd8a8497d0914a1bafb08fc5774d457bef87ba1c47780b996273dd6"
+        },
+        {
+          "path": "voices/if_sara.npy",
+          "size": 522368,
+          "sha256": "4e95b29a13a60a071a542fd58b733aafb1e51b59a22408ace1612fc7f80a2eeb"
+        },
+        {
+          "path": "voices/im_nicola.npy",
+          "size": 522368,
+          "sha256": "703545ac7873eabe7b3759dfcec97a645f1d7369f78e75cb243b3d4a42667c87"
+        },
+        {
+          "path": "voices/jf_alpha.npy",
+          "size": 522368,
+          "sha256": "30cba93110ce2341aa96bd88ef5eaf7a13d7b7438237c7b5e7cbc1d110ff1ce2"
+        },
+        {
+          "path": "voices/jf_gongitsune.npy",
+          "size": 522368,
+          "sha256": "9d7b8504dc2c4c5f2e34fef58bbf4d9e4fe4e78a6bfbfdee570f2eaed6896a09"
+        },
+        {
+          "path": "voices/jf_nezumi.npy",
+          "size": 522368,
+          "sha256": "bc5c366d7a3e15a92a103985cc27e0f10120ff5b5e9a043a27dfddc965c758bd"
+        },
+        {
+          "path": "voices/jf_tebukuro.npy",
+          "size": 522368,
+          "sha256": "b1d5d953f662b86230e43d98190a1f047611d3f1dc06b07f8c142029f2f816ab"
+        },
+        {
+          "path": "voices/jm_kumo.npy",
+          "size": 522368,
+          "sha256": "d55aa155da7bb3409efbc13d13de29e2c61da2271f367eefc2b6613be9bf2f6f"
+        },
+        {
+          "path": "voices/pf_dora.npy",
+          "size": 522368,
+          "sha256": "57d8305c1ddf61949179e9f124d87eccd9e61f86913d45e24807cd56a34136e4"
+        },
+        {
+          "path": "voices/pm_alex.npy",
+          "size": 522368,
+          "sha256": "dce15a78711c4b47d6959ea3c6bef9d334fc4a2a084b624ed51d97d45fc0464f"
+        },
+        {
+          "path": "voices/pm_santa.npy",
+          "size": 522368,
+          "sha256": "036e409b2e99ca9ee391a98bc659b5c0e1a8097adc61ca779fe176dc54580a13"
+        },
+        {
+          "path": "voices/zf_xiaobei.npy",
+          "size": 522368,
+          "sha256": "d4bf7a15446c14379e3b5e03c17885b7ba09cd120e7bc8372117754571963102"
+        },
+        {
+          "path": "voices/zf_xiaoni.npy",
+          "size": 522368,
+          "sha256": "e518b12b20db5a11604d0e307e56206dd1547d09ec15e33e26880c7c0c34fc35"
+        },
+        {
+          "path": "voices/zf_xiaoxiao.npy",
+          "size": 522368,
+          "sha256": "43bd4b5e7aabc1a93cb764c3138a84c18d2f4d5d782ce1bb5b49ab6ebbbe76f4"
+        },
+        {
+          "path": "voices/zf_xiaoyi.npy",
+          "size": 522368,
+          "sha256": "7d02569f38b012fca22ab9af2e99fc7f8a0876a7d729d58a81c1666815143313"
+        },
+        {
+          "path": "voices/zm_yunjian.npy",
+          "size": 522368,
+          "sha256": "c1665b210f65799ff48c7f1dbfd33795085a834a1dea0fbaa7a617887d36294e"
+        },
+        {
+          "path": "voices/zm_yunxi.npy",
+          "size": 522368,
+          "sha256": "39afb8da3415ce55bc509aee1a356f9d1429669bc68f35d14581d6fc88ffb424"
+        },
+        {
+          "path": "voices/zm_yunxia.npy",
+          "size": 522368,
+          "sha256": "f310a2ea4ccaeb9d63c96409432eeff5dfbb1684e95b26b32effaf2a9a5a9d40"
+        },
+        {
+          "path": "voices/zm_yunyang.npy",
+          "size": 522368,
+          "sha256": "53c0fc937095e2c939e61e377049e468caf486f5be397a32805efb49649ac2fc"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Phase 0 spike: prove offline Kokoro synthesis from a model stored on a user-chosen drive,
+    and measure CPU vs DirectML. Build flavour with -p:Ort=Cpu (default) or -p:Ort=DirectML.
+    Throwaway code: findings live in docs/adr/0001-*.md.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <DefineConstants Condition="'$(Ort)' == 'DirectML'">$(DefineConstants);ORT_DML</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="obj\**;bin\**" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Ort)' == 'Cpu'">
+    <PackageReference Include="KokoroSharp.CPU" Version="0.8.4" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Ort)' == 'DirectML'">
+    <PackageReference Include="KokoroSharp.DirectML" Version="0.8.4" />
+  </ItemGroup>
+</Project>

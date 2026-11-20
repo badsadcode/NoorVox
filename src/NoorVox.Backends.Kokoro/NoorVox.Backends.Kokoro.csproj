@@ -1,0 +1,11 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Kokoro adapter (ADR-0001). Only NoorVox.Worker references this project. -->
+  <ItemGroup>
+    <PackageReference Include="KokoroSharp" Version="0.8.4" />
+    <!-- CPU execution provider is the v1 baseline (ADR-0001 decision 2). -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.22.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\NoorVox.Core\NoorVox.Core.csproj" />
+  </ItemGroup>
+</Project>
