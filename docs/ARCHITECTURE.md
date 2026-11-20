@@ -100,6 +100,6 @@ and provenance (text sha256, voice, speed, model sha256, backend, worker, timing
 - Synthesis can't be cancelled mid-job (a KokoroSharp limitation): cancel = force-stop or recycle the worker.
 - Output is not bit-reproducible run to run, so take identity uses inputs, not audio hashes.
 - No projects, batch jobs, subtitles or export assembly yet (Phases 3–4).
-- The studio's Export uses a native Save dialog, which the smoke test can't automate; check it by hand.
+- The studio's Export uses a native Save dialog, which the smoke test can't automate. It was verified by hand on 2026-11-20 (WAV + `.noorvox.json` written to Exports); re-check it manually after changes.
 - The catalog is embedded; remote catalog refresh (for new models/voice packs without an app update) is planned.
 - Future backends (e.g. Qwen TTS) plug in behind `ITtsBackend` in their own worker; they will likely need a GPU and a Python sidecar.
