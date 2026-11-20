@@ -1,8 +1,12 @@
 # Builds a ready-to-run NoorVox folder: NoorVoxStudio.exe (double-click), noorvox.exe (CLI) and NoorVox.Worker.exe.
 # Self-contained win-x64: the target PC needs no .NET install (only the Edge WebView2 Runtime, built into Windows 11).
-# Usage:  .\tools\publish.ps1 [-Output E:\Apps\NoorVox] [-Zip]
+# Usage:  .\tools\publish.ps1 [-Output E:\Apps\NoorVox] [-Portable] [-Zip]
+#   -Portable  adds noorvox.portable: settings, worker registry and defaults live in <Output>\data instead of %APPDATA%.
+#              Use it when the app should never touch the user profile, or when several launchers (Explorer, packaged
+#              apps with virtualised AppData) must share one configuration. An existing data\ folder is never overwritten.
 param(
     [string]$Output = (Join-Path $PSScriptRoot "..\dist\NoorVox"),
+    [switch]$Portable,
     [switch]$Zip
 )
 $ErrorActionPreference = "Stop"
@@ -27,6 +31,11 @@ foreach ($proj in "src\NoorVox.Worker", "src\NoorVox.Cli", "src\NoorVox.Studio")
 Remove-Item (Join-Path $Output "voices") -Recurse -Force -ErrorAction SilentlyContinue
 Get-ChildItem $Output -Filter *.lib | Remove-Item -Force
 
+if ($Portable) {
+    $marker = Join-Path $Output "noorvox.portable"
+    if (-not (Test-Path $marker)) { Set-Content -Path $marker -Value "NoorVox portable mode: settings live in .\data" -Encoding utf8 }
+}
+
 $version = (& (Join-Path $Output "noorvox.exe") --version --json --quiet | ConvertFrom-Json).data.version
 @"
 NoorVox $version — local voice studio (Bad Ideas Works)
@@ -48,6 +57,8 @@ Write-Host "NoorVox $version published to $Output ($size MB)"
 if ($Zip) {
     $zipPath = Join-Path (Split-Path $Output -Parent) "NoorVox-$version-win-x64.zip"
     if (Test-Path $zipPath) { Remove-Item $zipPath }
-    Compress-Archive -Path (Join-Path $Output "*") -DestinationPath $zipPath
+    # Never ship personal data: the zip leaves out data\ (settings, worker registry).
+    $items = Get-ChildItem $Output | Where-Object { $_.Name -ne "data" }
+    Compress-Archive -Path $items.FullName -DestinationPath $zipPath
     Write-Host "Zip: $zipPath"
 }

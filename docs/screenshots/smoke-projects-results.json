@@ -1,5 +1,5 @@
 {
-  "when": "2026-11-20T16:04:39.050Z",
+  "when": "2026-11-20T16:39:36.559Z",
   "results": [
     {
       "name": "projects page lists the project",
@@ -42,6 +42,11 @@
       "detail": ""
     },
     {
+      "name": "takes play in the workspace",
+      "ok": true,
+      "detail": "ok 4.97"
+    },
+    {
       "name": "studio closes cleanly",
       "ok": true,
       "detail": "exit 0"
@@ -49,7 +54,7 @@
     {
       "name": "no worker left after close",
       "ok": true,
-      "detail": "worker pid 21204"
+      "detail": "worker pid 18408"
     }
   ]
 }

@@ -15,7 +15,6 @@ public partial class MainWindow : Window
     public const string AppHost = "app.noorvox.local";
     public const string MediaHost = "media.noorvox.local";
     public const string TakesHost = "takes.noorvox.local";
-    string? _mappedTakesDir;
 
     readonly StudioOptions _options;
     /// <summary>Kill-on-close job shared by all studio-bound workers: if the studio dies, Windows ends them.</summary>
@@ -24,7 +23,9 @@ public partial class MainWindow : Window
     BridgeHost? _bridge;
     StudioApi? _api;
     bool _closeReady;
-    string? _mappedPreviewDir;
+    volatile string? _previewDir;
+    volatile string? _takesDir;
+    CoreWebView2Environment? _env;
 
     public MainWindow(StudioOptions options)
     {
@@ -49,9 +50,9 @@ public partial class MainWindow : Window
             var userData = storage.Resolve(StorageKind.WebView).Path; // set before creation (spec §8.1)
             Directory.CreateDirectory(userData);
             // A desktop app may play the audio it just generated without a fresh click (Chromium autoplay policy).
-            var env = await CoreWebView2Environment.CreateAsync(null, userData,
+            _env = await CoreWebView2Environment.CreateAsync(null, userData,
                 new CoreWebView2EnvironmentOptions("--autoplay-policy=no-user-gesture-required"));
-            await Web.EnsureCoreWebView2Async(env);
+            await Web.EnsureCoreWebView2Async(_env);
         }
         catch (Exception ex) when (ex is WebView2RuntimeNotFoundException or COMException or IOException or UnauthorizedAccessException)
         {
@@ -63,6 +64,11 @@ public partial class MainWindow : Window
         var wwwroot = Path.Combine(AppContext.BaseDirectory, "wwwroot");
         core.SetVirtualHostNameToFolderMapping(AppHost, wwwroot, CoreWebView2HostResourceAccessKind.Deny);
         RemapPreviews(storage);
+        // Audio is served by a request handler registered before the page loads. (Virtual-host folder mappings added
+        // after load are not applied to the already-loaded page, which broke take playback when a project was opened.)
+        core.AddWebResourceRequestedFilter($"https://{MediaHost}/*", CoreWebView2WebResourceContext.All);
+        core.AddWebResourceRequestedFilter($"https://{TakesHost}/*", CoreWebView2WebResourceContext.All);
+        core.WebResourceRequested += ServeLocalAudio;
 
         bool dev = System.Diagnostics.Debugger.IsAttached || Environment.GetEnvironmentVariable("NOORVOX_DEVTOOLS") == "1";
         core.Settings.AreDevToolsEnabled = dev;
@@ -96,25 +102,57 @@ public partial class MainWindow : Window
         StudioLog.Write($"studio started, ui={wwwroot}, webview data={storage.Resolve(StorageKind.WebView).Path}");
     }
 
-    /// <summary>Maps the preview folder (in the user's temp storage) so the UI can play generated audio.</summary>
+    /// <summary>Points the preview host at the preview folder in the user's temp storage.</summary>
     public void RemapPreviews(StorageContext storage)
     {
         var dir = PreviewDir(storage);
         Directory.CreateDirectory(dir);
-        if (string.Equals(dir, _mappedPreviewDir, StringComparison.OrdinalIgnoreCase)) return;
-        if (_mappedPreviewDir is not null) Web.CoreWebView2.ClearVirtualHostNameToFolderMapping(MediaHost);
-        Web.CoreWebView2.SetVirtualHostNameToFolderMapping(MediaHost, dir, CoreWebView2HostResourceAccessKind.Allow);
-        _mappedPreviewDir = dir;
+        _previewDir = Path.GetFullPath(dir);
     }
 
-    /// <summary>Maps the open project's takes folder so the UI can play takes (one open project at a time).</summary>
+    /// <summary>Points the takes host at the open project's takes folder (one open project at a time).</summary>
     public void MapProjectTakes(string takesDir)
     {
         Directory.CreateDirectory(takesDir);
-        if (string.Equals(takesDir, _mappedTakesDir, StringComparison.OrdinalIgnoreCase)) return;
-        if (_mappedTakesDir is not null) Web.CoreWebView2.ClearVirtualHostNameToFolderMapping(TakesHost);
-        Web.CoreWebView2.SetVirtualHostNameToFolderMapping(TakesHost, takesDir, CoreWebView2HostResourceAccessKind.Allow);
-        _mappedTakesDir = takesDir;
+        _takesDir = Path.GetFullPath(takesDir);
+    }
+
+    /// <summary>
+    /// Serves <c>.wav</c> files from the preview folder or the open project's takes folder. Anything else, or any path
+    /// escaping those folders, gets a 404. Read-only, shared-read so a file being generated never blocks.
+    /// </summary>
+    void ServeLocalAudio(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
+    {
+        if (!Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var uri)) return;
+        string? root = uri.Host.Equals(MediaHost, StringComparison.OrdinalIgnoreCase) ? _previewDir
+            : uri.Host.Equals(TakesHost, StringComparison.OrdinalIgnoreCase) ? _takesDir : null;
+        string? file = null;
+        if (root is not null)
+        {
+            var rel = Uri.UnescapeDataString(uri.AbsolutePath).TrimStart('/');
+            if (rel.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
+            {
+                var full = Path.GetFullPath(Path.Combine(root, rel));
+                if (full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) && File.Exists(full)) file = full;
+            }
+        }
+        const string cors = "Access-Control-Allow-Origin: https://" + AppHost;
+        if (file is null)
+        {
+            e.Response = _env!.CreateWebResourceResponse(null, 404, "Not Found", cors);
+            return;
+        }
+        try
+        {
+            var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            e.Response = _env!.CreateWebResourceResponse(stream, 200, "OK",
+                string.Join("\r\n", "Content-Type: audio/wav", $"Content-Length: {stream.Length}", "Cache-Control: no-cache", cors));
+        }
+        catch (IOException ex)
+        {
+            StudioLog.Write($"audio serve failed for {file}: {ex.Message}");
+            e.Response = _env!.CreateWebResourceResponse(null, 500, "Error", cors);
+        }
     }
 
     static void CleanOldPreviews(StorageContext storage)

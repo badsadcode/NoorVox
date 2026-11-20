@@ -90,6 +90,16 @@ try {
   check("explicit approval moves to the new take; old take kept", takes.takes.length === 2 && takes.takes[1].approved && !takes.takes[0].approved);
   await s.shot(shots, "13-project-takes");
 
+  // Play a take through the UI the way a user does (regression: takes host failed after opening a project).
+  await s.js(`document.querySelector('article.segment[aria-label="ep01.s02.p001"] .take-row button').click(); return true;`);
+  await sleep(1500);
+  const toast = await s.js(`return document.querySelector(".toast.err")?.textContent ?? "";`);
+  const probe = await s.js(`const u = document.querySelector('article.segment[aria-label="ep01.s02.p001"]') && ${JSON.stringify("https://takes.noorvox.local/ep01.s02.p001/")} + ${JSON.stringify("")};
+    const takes = await new Promise((res) => { const id = "p" + Math.random(); const h = (e) => { if (e.data.id === id) { chrome.webview.removeEventListener("message", h); res(e.data.result); } };
+      chrome.webview.addEventListener("message", h); chrome.webview.postMessage(JSON.stringify({ id, method: "projects.takes", params: { path: ${JSON.stringify(projectDir)}, segmentId: "ep01.s02.p001" } })); });
+    return await new Promise((res) => { const a = new Audio(takes[0].mediaUrl); a.onloadedmetadata = () => res("ok " + a.duration.toFixed(2)); a.onerror = () => res("error " + (a.error && a.error.message)); setTimeout(() => res("timeout"), 8000); });`);
+  check("takes play in the workspace", probe.startsWith("ok") && !/Failed to load/.test(toast), `${probe}${toast ? " · toast: " + toast : ""}`);
+
   const studioWorker = (await s.bridge("workers.list")).workers.find((w) => w.workerId === "studio");
   const exit = await s.close();
   check("studio closes cleanly", exit !== "timeout", `exit ${exit}`);
