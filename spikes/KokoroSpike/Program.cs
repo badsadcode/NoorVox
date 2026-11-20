@@ -21,6 +21,8 @@ var voiceName = Arg("--voice", "af_heart");
 int runs = int.Parse(Arg("--runs", "3"));
 #if ORT_DML
 const string flavour = "DirectML";
+#elif ORT_CUDA
+const string flavour = "CUDA";
 #else
 const string flavour = "CPU";
 #endif
@@ -33,6 +35,9 @@ Console.WriteLine($"ws_before_load_mb={MB(proc.WorkingSet64)}");
 
 var sw = Stopwatch.StartNew();
 var opts = new SessionOptions();
+#if ORT_CUDA
+opts.AppendExecutionProvider_CUDA(0);
+#endif
 #if ORT_DML
 opts.EnableMemoryPattern = false; opts.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
 opts.AppendExecutionProvider_DML(int.Parse(Arg("--dml-device", "0")));

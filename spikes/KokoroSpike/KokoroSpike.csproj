@@ -10,12 +10,18 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <DefineConstants Condition="'$(Ort)' == 'DirectML'">$(DefineConstants);ORT_DML</DefineConstants>
+    <DefineConstants Condition="'$(Ort)' == 'Cuda'">$(DefineConstants);ORT_CUDA</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="obj\**;bin\**" />
   </ItemGroup>
   <ItemGroup Condition="'$(Ort)' == 'Cpu'">
     <PackageReference Include="KokoroSharp.CPU" Version="0.8.4" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Ort)' == 'Cuda'">
+    <!-- CUDA 12 / cuDNN 9 DLLs are not shipped here; the spike borrows them from a PyTorch cu128 install via PATH. -->
+    <PackageReference Include="KokoroSharp" Version="0.8.4" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu.Windows" Version="1.22.0" />
   </ItemGroup>
   <ItemGroup Condition="'$(Ort)' == 'DirectML'">
     <PackageReference Include="KokoroSharp.DirectML" Version="0.8.4" />
