@@ -7,9 +7,11 @@
     <!-- The title bar is part of the themed UI (TitleBar.tsx). WindowChrome removes Windows' caption but keeps the
          resize border, shadow, snapping and animations; WebView2 non-client regions (CSS app-region: drag) handle moving. -->
     <WindowChrome.WindowChrome>
-        <WindowChrome CaptionHeight="0" ResizeBorderThickness="6" GlassFrameThickness="0,0,0,1" CornerRadius="0" UseAeroCaptionButtons="False" />
+        <WindowChrome CaptionHeight="0" ResizeBorderThickness="5" GlassFrameThickness="0,0,0,1" CornerRadius="0" UseAeroCaptionButtons="False" />
     </WindowChrome.WindowChrome>
-    <Grid x:Name="Root">
+    <!-- Margin 5 (set in FitMaximized) keeps a strip of the window itself around the WebView2: the web view is a child HWND
+         that would otherwise take every mouse event at the edges, and the window could not be resized. -->
+    <Grid x:Name="Root" Margin="5">
         <wv2:WebView2 x:Name="Web" DefaultBackgroundColor="#12101C" />
         <Border x:Name="Fallback" Visibility="Collapsed" Background="#12101C" Padding="48">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="560">

@@ -102,6 +102,7 @@ public partial class MainWindow : Window
             if (mic) e.SavesInProfile = false;
         };
         StateChanged += (_, _) => { FitMaximized(); _bridge?.Emit("window.state", new { maximized = WindowState == WindowState.Maximized }); };
+        FitMaximized();
 
         _bridge = new BridgeHost(core, Dispatcher);
         _api = new StudioApi(this, _job, _bridge, _workerExe);
@@ -205,10 +206,13 @@ public partial class MainWindow : Window
     /// With WindowChrome a maximized window extends past the screen by the resize border; pad it so the UI's own title bar
     /// and its buttons stay fully visible.
     /// </summary>
+    const double ResizeEdge = 5; // = WindowChrome.ResizeBorderThickness in MainWindow.xaml
+
     void FitMaximized()
     {
-        // Resize frame + padded border (DIPs): exactly what Windows pushes off-screen on each side of a maximized window.
-        Root.Margin = WindowState == WindowState.Maximized ? SystemParameters.WindowResizeBorderThickness : new Thickness(0);
+        // Maximized: resize frame + padded border (DIPs), exactly what Windows pushes off-screen on each side.
+        // Normal: a 5 px strip that the window owns, so its edges and corners can be grabbed for resizing (see MainWindow.xaml).
+        Root.Margin = WindowState == WindowState.Maximized ? SystemParameters.WindowResizeBorderThickness : new Thickness(ResizeEdge);
     }
 
     /// <summary>Light themes get a light title bar, dark themes a dark one.</summary>
