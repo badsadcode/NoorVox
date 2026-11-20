@@ -101,7 +101,7 @@ export function Monitor() {
                 <div className="metric"><span>Jobs done</span><b>{w.jobsCompleted ?? "—"}</b></div>
                 <div className="metric" style={{ gridColumn: "1 / -1" }}>
                   <span>Current work</span>
-                  <b>{w.currentJob ? `Synthesizing ${w.currentJob.textChars} characters · ${w.currentJob.voiceId} · ${jobSecs.toFixed(0)} s` : w.state === "loading" ? "Loading model…" : "Idle"}</b>
+                  <b>{w.currentJob ? `Synthesizing ${w.currentJob.textChars} characters · ${w.currentJob.voiceId} · ${jobSecs.toFixed(0)} s` : w.state === "loading" ? loadingText(w) : "Idle"}</b>
                 </div>
                 <div className="muted small" style={{ gridColumn: "1 / -1" }}>
                   {w.loadedModel && <>Model sha256 <span className="mono">{shortHash(w.loadedModel.modelSha256)}</span> · loaded in {(w.loadedModel.loadMs / 1000).toFixed(1)} s · </>}
@@ -129,7 +129,9 @@ export function Monitor() {
       {confirm?.kind === "force" && (
         <Confirm title={`Force stop ${confirm.w.workerId === "studio" ? "the voice engine" : confirm.w.workerId}?`} confirmText="Terminate" danger
           onCancel={() => setConfirm(null)} onConfirm={() => { const w = confirm.w; setConfirm(null); stop(w, true); }}>
-          {confirm.w.currentJob
+          {confirm.w.state === "loading"
+            ? `It is still loading ${confirm.w.loading?.modelId ?? "a model"} (${loadingText(confirm.w).split(" · ").pop()} so far). Large GPU models can take a few minutes to load, especially right after a restart; stopping now means the next generation starts the load from scratch.`
+            : confirm.w.currentJob
             ? "It is generating right now. The unfinished audio will be discarded; nothing already saved is affected."
             : "The process will be terminated immediately. Nothing you've saved is affected."}
         </Confirm>
@@ -141,4 +143,12 @@ export function Monitor() {
       )}
     </>
   );
+}
+
+/** "Loading qwen3-tts-1.7b-customvoice 1.0 · Reading the model from disk · 95 s": a long load must look alive, not hung. */
+function loadingText(w: WorkerStatus): string {
+  const l = w.loading;
+  if (!l) return "Loading model…";
+  const secs = Math.max(0, Math.round((Date.now() - Date.parse(l.startedAt)) / 1000));
+  return `Loading ${l.modelId} ${l.modelVersion}${l.stage ? ` · ${l.stage}` : ""} · ${secs} s`;
 }

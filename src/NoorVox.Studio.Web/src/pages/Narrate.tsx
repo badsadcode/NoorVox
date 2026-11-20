@@ -24,7 +24,7 @@ function readDraft(): string {
 }
 
 export function Narrate() {
-  const { notify, refreshWorkers, go, info, takes, setTakes } = useStudio();
+  const { notify, refreshWorkers, go, info, takes, setTakes, workers } = useStudio();
   const [voices, setVoices] = useState<VoicesResponse | null>(null);
   const [text, setText] = useState(readDraft);
   const [voiceId, setVoiceId] = useState("");
@@ -37,6 +37,8 @@ export function Narrate() {
   const [cloning, setCloning] = useState(false);
   const [reloadVoices, setReloadVoices] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
+  const [busySince, setBusySince] = useState<number | null>(null);
+  const [, setTick] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [playing, setPlaying] = useState<string | null>(null);
   const [progress, setProgress] = useState<Record<string, number>>({});
@@ -63,7 +65,16 @@ export function Narrate() {
   useEffect(() => save(STYLE_KEY, style), [style]);
   useEffect(() => save(LANG_KEY, language), [language]);
   const caps = voices?.capabilities;
+  // What the studio's engine is doing while a generation waits (polled every 2 s by the studio shell).
+  const loadingNow = busy ? workers.find((w) => w.workerId === "studio" && w.state === "loading")?.loading ?? null : null;
+  const studioLoaded = workers.find((w) => w.workerId === "studio")?.loadedModel;
+  const modelLoaded = !!studioLoaded && voices?.model === `${studioLoaded.id}@${studioLoaded.version}`;
   useEffect(() => on<{ message: string }>("narration.progress", (d) => setBusy(d.message)), []);
+  useEffect(() => { // a visible clock while generating: a long model load must never look like a hang
+    if (!busy) return;
+    const id = window.setInterval(() => setTick((t) => t + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [busy]);
 
   useEffect(() => {
     const a = audio.current;
@@ -102,6 +113,7 @@ export function Narrate() {
     if (!voiceId || !spoken.trim() || busy) return;
     setError(null);
     setBusy("Preparing…");
+    setBusySince(Date.now());
     try {
       // Only send what this model supports (the C# side rejects anything else anyway).
       const r = await call<GenerateResponse>("narration.generate", {
@@ -120,6 +132,7 @@ export function Narrate() {
       setError(errorText(e));
     } finally {
       setBusy(null);
+      setBusySince(null);
       refreshWorkers();
     }
   }, [voiceId, speed, busy, voice, play, notify, refreshWorkers, voices?.model, caps, style, seedLocked, seed, language]);
@@ -259,6 +272,7 @@ export function Narrate() {
                 : caps.cloning ? "This model has no speed or style controls; the voice comes from the recording."
                 : "This model has no speed or style controls."}
               {caps?.requiresGpu && " Runs on your NVIDIA GPU."}
+              {caps?.requiresGpu && !modelLoaded && " Not loaded yet: the first line takes a few minutes (see below), then it's quick."}
             </p>
           </section>
 
@@ -267,7 +281,16 @@ export function Narrate() {
             <button className="btn primary big" onClick={() => generate(text)} disabled={!!busy || !text.trim() || !voice}>
               {busy ? <Spinner /> : <Play />} {busy ? "Generating…" : "Generate narration"}
             </button>
-            <div className="gen-status" aria-live="polite" style={{ marginTop: 8 }}>{busy}</div>
+            <div className="gen-status" aria-live="polite" style={{ marginTop: 8 }}>
+              {loadingNow ? `${loadingNow.stage ?? "Loading the model"}…` : busy}
+              {busy && busySince != null && <span className="mono muted"> · {Math.round((Date.now() - busySince) / 1000)} s</span>}
+            </div>
+            {busy && caps?.requiresGpu && (loadingNow || /^(Starting|Loading)/.test(busy)) && (
+              <p className="note" style={{ marginTop: 8 }}>
+                The first line after starting NoorVox loads the model (about 4.5 GB) and prepares the GPU. On this PC that measured
+                1½–4 minutes from the hard drive, longest right after a restart. Later lines take seconds while the model stays loaded.
+              </p>
+            )}
             {error && <p className="note err">{error}</p>}
           </section>
         </aside>

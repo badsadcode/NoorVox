@@ -36,6 +36,7 @@ public sealed class KokoroBackend(Action<string>? log = null) : ITtsBackend, IBa
     public GpuMemoryInfo? Gpu => null;
     public SidecarInfo? Sidecar => null;
     public string? ProviderNote { get; private set; }
+    public string? LoadStage => null; // loads in seconds
 
     public Task LoadAsync(InstalledModel model, BackendLoadOptions options, CancellationToken ct) => Task.Run(() =>
     {

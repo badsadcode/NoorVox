@@ -27,6 +27,7 @@ public sealed class WorkerHost(string workerId, string pipeName, string token, s
     ITtsBackend? _backend;
     string _state = "idle";
     LoadedModelInfo? _loaded;
+    (string Id, string Version, DateTimeOffset Since)? _loading;
     CurrentJobInfo? _job;
     long _jobsCompleted;
     DateTimeOffset _lastActivity = DateTimeOffset.UtcNow;
@@ -203,6 +204,7 @@ public sealed class WorkerHost(string workerId, string pipeName, string token, s
                 Gpu = gpu,
                 Sidecar = sidecar,
                 ProviderNote = resources?.ProviderNote,
+                Loading = _state == "loading" && _loading is { } l ? new LoadingInfo(l.Id, l.Version, l.Since, resources?.LoadStage) : null,
             };
         }
     }
@@ -220,6 +222,7 @@ public sealed class WorkerHost(string workerId, string pipeName, string token, s
             }
             if (_state == "loading") throw new NoorVoxException(ErrorCodes.WorkerBusy, ExitCode.WorkerBusy, "A model is already loading.");
             _state = "loading";
+            _loading = (model.Id, model.Version, DateTimeOffset.UtcNow);
             _lastActivity = DateTimeOffset.UtcNow;
         }
         var sw = Stopwatch.StartNew();

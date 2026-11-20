@@ -58,6 +58,8 @@ public sealed record WorkerStatusReport
     public CurrentJobInfo? CurrentJob { get; init; }
     public long? JobsCompleted { get; init; }
     public ResourceSnapshot? Resources { get; init; }
+    /// <summary>While loading: model, start time and the engine's stage (Qwen reports stages; Kokoro loads in seconds).</summary>
+    public LoadingInfo? Loading { get; init; }
     public int? IdleTimeoutSeconds { get; init; }
     public string? LogPath { get; init; }
     public string? Error { get; init; }
@@ -219,6 +221,7 @@ public sealed class WorkerSupervisor(StorageContext storage, string workerExePat
         BackendVersion = s.BackendVersion,
         ExecutionProvider = s.ExecutionProvider,
         LoadedModel = s.LoadedModel,
+        Loading = s.Loading,
         CurrentJob = s.CurrentJob,
         JobsCompleted = s.JobsCompleted,
         Resources = new ResourceSnapshot(s.WorkingSetBytes, s.PrivateBytes, s.CpuTimeMs, s.SampledAt, "worker self-report (System.Diagnostics.Process)",

@@ -10,6 +10,7 @@ Requests:  {"id": "...", "op": "load", "modelDir": "...", "warmup": true}
            {"id": "...", "op": "synth", "mode": "custom"|"clone", "text": "...", "language": "Auto"|"English"|...,
             "speaker": "aiden", "instruct": "...", "refAudio": "...", "refText": "...", "seed": 123, "out": "x.wav"}
 Responses: {"id": "...", "ok": true, ...} | {"id": "...", "ok": false, "error": {"code": "...", "message": "..."}}
+Events (no id, any time before a reply): {"event": "progress", "stage": "reading" | "warmup"}
 """
 import json
 import os
@@ -114,11 +115,13 @@ class Engine:
         if not torch.cuda.is_available():
             raise EngineError("gpu_required", "Qwen3-TTS needs an NVIDIA GPU with CUDA; none is available to PyTorch.")
         torch.cuda.reset_peak_memory_stats()
+        send({"event": "progress", "stage": "reading"})
         t0 = time.perf_counter()
         self.model = FasterQwen3TTS.from_pretrained(req["modelDir"], local_files_only=True)
         load_ms = round((time.perf_counter() - t0) * 1000)
         warm_ms = 0
         if req.get("warmup", True):
+            send({"event": "progress", "stage": "warmup"})
             t0 = time.perf_counter()
             self.model.warmup(prefill_len=100)
             warm_ms = round((time.perf_counter() - t0) * 1000)

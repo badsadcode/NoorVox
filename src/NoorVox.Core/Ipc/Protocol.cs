@@ -68,7 +68,11 @@ public sealed class WorkerRuntimeStatus
     /// <summary>A helper process (Qwen's Python engine) with its own memory footprint.</summary>
     public Backends.SidecarInfo? Sidecar { get; set; }
     public string? ProviderNote { get; set; }
+    /// <summary>While <see cref="State"/> is <c>loading</c>: which model, since when, and the engine's current stage.</summary>
+    public LoadingInfo? Loading { get; set; }
 }
+
+public sealed record LoadingInfo(string ModelId, string ModelVersion, DateTimeOffset StartedAt, string? Stage);
 
 /// <summary>Raised when the worker cannot be reached at all (no pipe, timeout, broken connection).</summary>
 public sealed class WorkerUnreachableException(string message, Exception? inner = null) : Exception(message, inner);

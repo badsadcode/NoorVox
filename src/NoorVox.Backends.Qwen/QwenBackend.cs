@@ -34,6 +34,7 @@ public sealed class QwenBackend(Action<string> log) : ITtsBackend, IBackendResou
     public bool IsLoaded => _model is not null;
     public GpuMemoryInfo? Gpu => _gpu;
     public string? ProviderNote => null;
+    public string? LoadStage { get; private set; }
 
     public SidecarInfo? Sidecar
     {
@@ -60,10 +61,16 @@ public sealed class QwenBackend(Action<string> log) : ITtsBackend, IBackendResou
         if (!File.Exists(python))
             throw new NoorVoxException(ErrorCodes.EngineBroken, ExitCode.WorkerError, $"Engine Python not found: {python}. Reinstall the qwen-tts engine.");
 
-        await StartSidecarAsync(python, options, ct);
-        var reply = await CallAsync(new JsonObject { ["op"] = "load", ["modelDir"] = model.Directory, ["warmup"] = true }, ct);
-        ReadGpu(reply);
-        log($"qwen model loaded: load {reply["loadMs"]} ms, CUDA graph warm-up {reply["warmupMs"]} ms");
+        LoadStage = "Starting Python and PyTorch";
+        try
+        {
+            await StartSidecarAsync(python, options, ct);
+            LoadStage = "Reading the model from disk";
+            var reply = await CallAsync(new JsonObject { ["op"] = "load", ["modelDir"] = model.Directory, ["warmup"] = true }, ct);
+            ReadGpu(reply);
+            log($"qwen model loaded: load {reply["loadMs"]} ms, CUDA graph warm-up {reply["warmupMs"]} ms");
+        }
+        finally { LoadStage = null; }
         _model = model;
     }
 
@@ -213,13 +220,28 @@ public sealed class QwenBackend(Action<string> log) : ITtsBackend, IBackendResou
 
     async Task<JsonObject> ReadMessageAsync(CancellationToken ct)
     {
-        var line = await _proc!.StandardOutput.ReadLineAsync(ct);
-        if (line is null)
+        while (true)
         {
-            var exit = _proc.HasExited ? $" (exit code {_proc.ExitCode})" : "";
-            throw new NoorVoxException(ErrorCodes.EngineBroken, ExitCode.WorkerError, $"The Qwen engine stopped unexpectedly{exit}; see the worker log.");
+            var line = await _proc!.StandardOutput.ReadLineAsync(ct);
+            if (line is null)
+            {
+                var exit = _proc.HasExited ? $" (exit code {_proc.ExitCode})" : "";
+                throw new NoorVoxException(ErrorCodes.EngineBroken, ExitCode.WorkerError, $"The Qwen engine stopped unexpectedly{exit}; see the worker log.");
+            }
+            var msg = JsonNode.Parse(line) as JsonObject ?? throw new InvalidDataException("Qwen engine sent a non-object message.");
+            if (msg["event"]?.GetValue<string>() == "progress") // stage report while loading; the reply follows
+            {
+                LoadStage = msg["stage"]?.GetValue<string>() switch
+                {
+                    "reading" => "Reading the model from disk",
+                    "warmup" => "Preparing the GPU (CUDA graphs)",
+                    var other => other,
+                };
+                log($"qwen load stage: {LoadStage}");
+                continue;
+            }
+            return msg;
         }
-        return JsonNode.Parse(line) as JsonObject ?? throw new InvalidDataException("Qwen engine sent a non-object message.");
     }
 
     static NoorVoxException ToException(JsonObject reply)

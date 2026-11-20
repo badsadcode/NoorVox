@@ -29,6 +29,8 @@ public interface IBackendResources
     SidecarInfo? Sidecar { get; }
     /// <summary>A non-fatal note about the provider (e.g. CUDA requested but unavailable, fell back to CPU).</summary>
     string? ProviderNote { get; }
+    /// <summary>While loading: what the engine is doing right now, in words (null when not loading or unknown).</summary>
+    string? LoadStage { get; }
 }
 
 /// <summary>

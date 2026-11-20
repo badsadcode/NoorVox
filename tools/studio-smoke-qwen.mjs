@@ -40,8 +40,17 @@ try {
   await sleep(500);
   const started = Date.now();
   await s.clickText("button", "Generate narration");
-  await s.waitFor(`document.querySelectorAll("article.take").length >= 1`, 900000, "first Qwen take");
+  // While it loads, the page must show what the engine is doing and a running clock (a long load must never look hung).
+  const seen = new Set();
+  while (!(await s.js(`return document.querySelectorAll("article.take").length >= 1;`))) {
+    if (Date.now() - started > 900000) throw new Error("timeout waiting for first Qwen take");
+    const status = await s.js(`return document.querySelector(".gen-status")?.textContent ?? "";`);
+    for (const st of ["Starting Python", "Reading the model", "Preparing the GPU"]) if (status.includes(st)) seen.add(st);
+    if (/ · \d+ s$/.test(status)) seen.add("clock");
+    await sleep(400);
+  }
   check("a Qwen take is generated in the studio", true, `${((Date.now() - started) / 1000).toFixed(0)} s including model load`);
+  check("the load shows engine stages and a clock", seen.has("clock") && [...seen].some((x) => x !== "clock"), [...seen].join(", "));
   const meta1 = await s.js(`return document.querySelector("article.take .take-meta").textContent;`);
   check("the take shows its seed and style", meta1.includes("seed 2026") && meta1.includes("style:"), meta1);
   await s.shot(shots, "20-narrate-qwen");

@@ -87,6 +87,8 @@ export interface WorkerStatus {
   backendVersion?: string;
   executionProvider?: string;
   loadedModel?: LoadedModel;
+  /** While state is "loading": the model, when loading started, and the engine's stage (Qwen reports stages). */
+  loading?: { modelId: string; modelVersion: string; startedAt: string; stage: string | null } | null;
   currentJob?: CurrentJob;
   jobsCompleted?: number;
   resources?: {
