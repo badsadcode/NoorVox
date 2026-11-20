@@ -101,18 +101,54 @@ public sealed class JobRunner(ProjectStore store, InstalledModel model)
         return job;
     }
 
+    string JournalPath(string id) => Path.Combine(store.JobsDir, $"{id}.journal");
+
+    /// <summary>
+    /// Full snapshot: written at start, every 50 items or 5 s, and at the end. Between snapshots each finished item is
+    /// appended to a small journal (one JSON line), so persistence stays O(items) instead of rewriting the whole job
+    /// after every segment. Loading replays the journal over the snapshot; replay is idempotent.
+    /// </summary>
     void Save(GenerationJob job)
     {
         Directory.CreateDirectory(store.JobsDir);
-        FileUtil.WriteAllTextAtomic(JobPath(job.JobId), Json.Serialize(job));
+        FileUtil.WriteAllTextAtomic(JobPath(job.JobId), Json.Serialize(job, indented: false));
+        try { File.Delete(JournalPath(job.JobId)); } catch (IOException) { }
+    }
+
+    static void Journal(FileStream journal, JobItem item)
+    {
+        var line = System.Text.Encoding.UTF8.GetBytes(Json.Serialize(item, indented: false) + "\n");
+        journal.Write(line);
+        journal.Flush(); // to the OS: survives a NoorVox crash, like every other NoorVox write (no per-item disk sync)
+    }
+
+    GenerationJob ReadWithJournal(string path)
+    {
+        var job = Json.ReadFile<GenerationJob>(path);
+        var journal = JournalPath(job.JobId);
+        if (!File.Exists(journal)) return job;
+        var byId = job.Items.ToDictionary(i => i.SegmentId);
+        using var fs = new FileStream(journal, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var reader = new StreamReader(fs);
+        while (reader.ReadLine() is { } line)
+        {
+            JobItem? entry;
+            try { entry = Json.Deserialize<JobItem>(line); }
+            catch (System.Text.Json.JsonException) { break; } // a torn last line from a crash: ignore it
+            if (entry is not null && byId.TryGetValue(entry.SegmentId, out var item))
+            {
+                item.State = entry.State; item.TakeId = entry.TakeId; item.DurationMs = entry.DurationMs;
+                item.SynthesisMs = entry.SynthesisMs; item.Error = entry.Error; item.FinishedAt = entry.FinishedAt;
+            }
+        }
+        return job;
     }
 
     public GenerationJob Load(string jobId)
     {
         if (!ProjectStore.IsValidId(jobId) || !File.Exists(JobPath(jobId)))
             throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, $"No job '{jobId}' in this project.");
-        var job = Json.ReadFile<GenerationJob>(JobPath(jobId));
-        return RecoverIfStale(job);
+        return RecoverIfStale(ReadWithJournal(JobPath(jobId)));
     }
 
     /// <summary>All jobs, newest first. A job left "running" by a process that no longer exists becomes "interrupted".</summary>
@@ -120,7 +156,7 @@ public sealed class JobRunner(ProjectStore store, InstalledModel model)
     {
         if (!Directory.Exists(store.JobsDir)) return [];
         return Directory.EnumerateFiles(store.JobsDir, "job_*.json")
-            .Select(f => { try { return RecoverIfStale(Json.ReadFile<GenerationJob>(f)); } catch (Exception ex) when (ex is System.Text.Json.JsonException or IOException) { return null; } })
+            .Select(f => { try { return RecoverIfStale(ReadWithJournal(f)); } catch (Exception ex) when (ex is System.Text.Json.JsonException or IOException) { return null; } })
             .Where(j => j is not null).Select(j => j!)
             .OrderByDescending(j => j.CreatedAt).ToList();
     }
@@ -158,62 +194,104 @@ public sealed class JobRunner(ProjectStore store, InstalledModel model)
         foreach (var i in job.Items.Where(i => i.State is ItemStates.Running or ItemStates.Interrupted or ItemStates.Failed)) i.State = ItemStates.Queued;
         Save(job);
         var pron = store.Pronunciation();
+        // Where each segment lives, built once per run (re-built if a segment moved meanwhile).
+        var index = BuildIndex();
+        var journal = new FileStream(JournalPath(job.JobId), FileMode.Append, FileAccess.Write, FileShare.Read);
+        var lastSnapshot = DateTime.UtcNow;
+        int sinceSnapshot = 0;
 
-        foreach (var item in job.Items)
+        try
         {
-            if (ItemStates.IsDone(item.State)) continue;
-            if (stopAfterCurrent?.Invoke() == true)
+            foreach (var item in job.Items)
             {
-                job.State = JobStates.Interrupted;
-                break;
-            }
-            item.State = ItemStates.Running;
-            item.Error = null;
-            Save(job);
-            progress?.Report(new JobProgress(job.JobId, job.State, job.Done, job.Total, job.FailedCount, item.SegmentId, null));
+                if (ItemStates.IsDone(item.State)) continue;
+                if (stopAfterCurrent?.Invoke() == true)
+                {
+                    job.State = JobStates.Interrupted;
+                    break;
+                }
+                // "running" lives in memory only: after a crash the item is simply redone (a committed take is reused).
+                item.State = ItemStates.Running;
+                item.Error = null;
+                progress?.Report(new JobProgress(job.JobId, job.State, job.Done, job.Total, job.FailedCount, item.SegmentId, null));
 
-            try
-            {
-                await RunItemAsync(job, item, synth, pron, ct);
-            }
-            catch (OperationCanceledException)
-            {
-                item.State = ItemStates.Interrupted;
-                job.State = JobStates.Interrupted;
-                job.FinishedAt = DateTimeOffset.Now;
-                Save(job);
+                try
+                {
+                    await RunItemAsync(job, item, synth, pron, index, ct);
+                }
+                catch (OperationCanceledException)
+                {
+                    item.State = ItemStates.Interrupted;
+                    job.State = JobStates.Interrupted;
+                    job.FinishedAt = DateTimeOffset.Now;
+                    journal.Dispose();
+                    Save(job);
+                    progress?.Report(new JobProgress(job.JobId, job.State, job.Done, job.Total, job.FailedCount, null, item));
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    item.State = ItemStates.Failed;
+                    item.Error = ex.Message;
+                }
+                item.FinishedAt = DateTimeOffset.Now;
+                Journal(journal, item);
+                if (++sinceSnapshot >= 50 || (DateTime.UtcNow - lastSnapshot).TotalSeconds >= 5)
+                {
+                    journal.Dispose();
+                    Save(job);
+                    journal = new FileStream(JournalPath(job.JobId), FileMode.Append, FileAccess.Write, FileShare.Read);
+                    sinceSnapshot = 0;
+                    lastSnapshot = DateTime.UtcNow;
+                }
                 progress?.Report(new JobProgress(job.JobId, job.State, job.Done, job.Total, job.FailedCount, null, item));
-                throw;
             }
-            catch (Exception ex)
-            {
-                item.State = ItemStates.Failed;
-                item.Error = ex.Message;
-            }
-            item.FinishedAt = DateTimeOffset.Now;
-            Save(job);
-            progress?.Report(new JobProgress(job.JobId, job.State, job.Done, job.Total, job.FailedCount, null, item));
+        }
+        finally
+        {
+            journal.Dispose();
         }
 
         if (job.State == JobStates.Running)
             job.State = job.FailedCount > 0 && job.Done == 0 ? JobStates.Failed : JobStates.Completed;
+        if (job.AutoApprove) store.MutateProject(_ => { });
         job.FinishedAt = DateTimeOffset.Now;
         Save(job);
         progress?.Report(new JobProgress(job.JobId, job.State, job.Done, job.Total, job.FailedCount, null, null));
         return job;
     }
 
-    async Task RunItemAsync(GenerationJob job, JobItem item, SegmentSynthesizer synth, PronunciationFile pron, CancellationToken ct)
+    Dictionary<string, string> BuildIndex()
     {
         store.Reload();
-        var loc = store.AllSegments().FirstOrDefault(l => l.Segment.SegmentId == item.SegmentId);
-        if (loc is null || string.IsNullOrWhiteSpace(loc.Segment.Text))
+        return store.AllSegments().ToDictionary(l => l.Segment.SegmentId, l => l.Section.SectionId, StringComparer.Ordinal);
+    }
+
+    /// <summary>Reads only the section file that holds the segment (the latest text on disk), not the whole project.</summary>
+    Segment? FindSegment(string segmentId, Dictionary<string, string> index, out string? sectionId)
+    {
+        for (int attempt = 0; attempt < 2; attempt++)
+        {
+            if (index.TryGetValue(segmentId, out var found) && store.Project.Sections.Any(s => s.SectionId == found))
+            {
+                var seg = store.LoadSection(found).Scenes.SelectMany(s => s.Segments).FirstOrDefault(s => s.SegmentId == segmentId);
+                if (seg is not null) { sectionId = found; return seg; }
+            }
+            if (attempt == 0) { var fresh = BuildIndex(); index.Clear(); foreach (var kv in fresh) index[kv.Key] = kv.Value; }
+        }
+        sectionId = null;
+        return null;
+    }
+
+    async Task RunItemAsync(GenerationJob job, JobItem item, SegmentSynthesizer synth, PronunciationFile pron, Dictionary<string, string> index, CancellationToken ct)
+    {
+        var seg = FindSegment(item.SegmentId, index, out var sectionId);
+        if (seg is null || string.IsNullOrWhiteSpace(seg.Text))
         {
             item.State = ItemStates.Skipped;
-            item.Error = loc is null ? "Segment was removed from the script." : "Segment has no text.";
+            item.Error = seg is null ? "Segment was removed from the script." : "Segment has no text.";
             return;
         }
-        var seg = loc.Segment;
         var eff = store.Effective(seg, model, pron);
         if (!model.Voices.Any(v => v.VoiceId == eff.VoiceId))
             throw new NoorVoxException(ErrorCodes.VoiceNotFound, ExitCode.ModelMissing, $"Voice '{eff.VoiceId}' is not installed.");
@@ -233,7 +311,12 @@ public sealed class JobRunner(ProjectStore store, InstalledModel model)
         item.DurationMs = take.DurationMs;
 
         if (job.AutoApprove && seg.ApprovedTakeId is null)
-            store.UpdateSegment(seg.SegmentId, s => s.ApprovedTakeId ??= take.TakeId); // never replaces an approval made meanwhile
+            store.MutateSection(sectionId!, f => // never replaces an approval made meanwhile
+            {
+                var fresh = f.Scenes.SelectMany(s => s.Segments).FirstOrDefault(s => s.SegmentId == seg.SegmentId);
+                if (fresh is not null) fresh.ApprovedTakeId ??= take.TakeId;
+                return 0;
+            }, touchProject: false); // modifiedAt is updated once when the job ends
     }
 
     async Task<TakeRecord> GenerateTakeAsync(GenerationJob job, Segment seg, EffectiveSegment eff, SegmentSynthesizer synth, CancellationToken ct)

@@ -1,6 +1,6 @@
 # NoorVox example: one project per template, generated headlessly, with an interruption + resume, then clips exported.
 # Usage:  .\examples\production.ps1 [-Noorvox <noorvox.exe>] [-WorkDir <folder for the three projects>]
-# Tested with NoorVox 0.1.0-dev (Phase 3). Requires an installed model (noorvox models install kokoro-82m).
+# Tested with NoorVox 0.1.0. Requires an installed model (noorvox models install kokoro-82m).
 param(
     [string]$Noorvox = "noorvox",
     [string]$WorkDir = (Join-Path ([IO.Path]::GetTempPath()) "noorvox-production-example")

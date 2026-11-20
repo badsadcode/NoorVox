@@ -3,10 +3,11 @@ import { call, errorText } from "../bridge";
 import { Drive, Folder } from "../components/Icons";
 import { fmtBytes } from "../format";
 import { useStudio } from "../studio";
-import type { AppInfo, StoragePath, ThemeId, VoicesResponse } from "../types";
+import type { AppInfo, StorageAuditReport, StoragePath, ThemeId, VoicesResponse } from "../types";
+import { Spinner } from "../components/Icons";
 
 export const THEMES: { id: ThemeId; name: string; blurb: string; chips: string[] }[] = [
-  { id: "nocturne", name: "Nocturne", blurb: "Violet night", chips: ["#12101c", "#1b1829", "#8b5cf6", "#a78bfa", "#ece9f7"] },
+  { id: "nocturne", name: "Nocturne", blurb: "Violet night", chips: ["#12101c", "#1b1829", "#8152f0", "#a78bfa", "#ece9f7"] },
   { id: "daylight", name: "Daylight", blurb: "Calm and light", chips: ["#f4f2fa", "#ffffff", "#6d3fe0", "#5428c4", "#1e1a2e"] },
   { id: "tape", name: "Tape Deck", blurb: "Warm amber studio", chips: ["#17120d", "#211a13", "#f59e0b", "#fbbf24", "#f3e9dc"] },
   { id: "thalassa", name: "Thalassa", blurb: "Deep sea teal", chips: ["#08151a", "#0e2128", "#22c3c9", "#5eead4", "#e2f4f6"] },
@@ -111,6 +112,8 @@ export function Settings() {
           </div>
         </section>
 
+        <StorageAuditPanel />
+
         <section className="panel">
           <h2>About</h2>
           <dl className="kv">
@@ -123,5 +126,59 @@ export function Settings() {
         </section>
       </div>
     </>
+  );
+}
+
+function StorageAuditPanel() {
+  const { notify } = useStudio();
+  const [report, setReport] = useState<StorageAuditReport | null>(null);
+  const [busy, setBusy] = useState<"audit" | "bundle" | null>(null);
+  const audit = async () => {
+    setBusy("audit");
+    try { setReport(await call<StorageAuditReport>("storage.audit")); } catch (e) { notify(errorText(e), true); } finally { setBusy(null); }
+  };
+  const bundle = async () => {
+    setBusy("bundle");
+    try {
+      const r = await call<{ cancelled: boolean; path?: string }>("diagnostics.bundle");
+      if (!r.cancelled) notify(`Support bundle saved: ${r.path}`);
+    } catch (e) { notify(errorText(e), true); } finally { setBusy(null); }
+  };
+  return (
+    <section className="panel" aria-label="Storage audit and diagnostics">
+      <h2>Storage audit &amp; diagnostics</h2>
+      <p className="muted small" style={{ marginTop: -4 }}>
+        Shows how much space each NoorVox folder uses, and finds NoorVox data in places your settings don't point to (for example a
+        leftover first run with default paths). The audit only reads; nothing is moved or deleted.
+      </p>
+      <div className="row">
+        <button className="btn" onClick={audit} disabled={!!busy}>{busy === "audit" && <Spinner size={14} />} Run storage audit</button>
+        <button className="btn" onClick={bundle} disabled={!!busy} title="Versions, settings, storage audit, models, workers and recent logs. Never scripts or audio.">
+          {busy === "bundle" && <Spinner size={14} />} Create support bundle…
+        </button>
+      </div>
+      {report && (
+        <div className="stack" style={{ marginTop: 12, gap: 8 }}>
+          <table className="audit">
+            <thead><tr><th>Location</th><th>Path</th><th>Used</th><th>Files</th><th>Free on drive</th></tr></thead>
+            <tbody>
+              {report.paths.map((p) => (
+                <tr key={p.kind}>
+                  <td>{p.kind}{p.onSystemDrive && <span className="pill" style={{ marginLeft: 6 }} title="On the Windows system drive (allowed)">system drive</span>}</td>
+                  <td className="mono">{p.path}{!p.exists && <span className="muted"> (not created yet)</span>}</td>
+                  <td>{fmtBytes(p.bytes)}</td><td>{p.files ?? "—"}</td><td>{fmtBytes(p.freeBytes)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {report.strays.length > 0 ? report.strays.map((s) => (
+            <p key={s.path} className="note err" style={{ margin: 0 }}>
+              Stray NoorVox data: <span className="mono">{s.path}</span> · {fmtBytes(s.bytes)} in {s.files} files ({s.note}). Your current settings don't use it; delete it yourself if you don't need it.
+            </p>
+          )) : <p className="note" style={{ margin: 0 }}>✔ No NoorVox data found outside your configured folders.</p>}
+          {report.notes.map((n) => <p key={n} className="muted small" style={{ margin: 0 }}>{n}</p>)}
+        </div>
+      )}
+    </section>
   );
 }

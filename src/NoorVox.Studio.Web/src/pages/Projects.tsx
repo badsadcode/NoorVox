@@ -20,6 +20,17 @@ export function Projects() {
     } catch (e) { notify(errorText(e), true); }
   };
   const forget = async (path: string) => { try { setRecent(await call<RecentProject[]>("projects.forget", { path })); } catch (e) { notify(errorText(e), true); } };
+  const [renaming, setRenaming] = useState<{ path: string; title: string } | null>(null);
+  const rename = async () => {
+    if (!renaming?.title.trim()) return;
+    try { setRecent(await call<RecentProject[]>("projects.rename", { path: renaming.path, title: renaming.title })); setRenaming(null); } catch (e) { notify(errorText(e), true); }
+  };
+  const duplicate = async (path: string) => {
+    try {
+      const r = await call<{ cancelled: boolean; path?: string; title?: string }>("projects.duplicate", { path });
+      if (!r.cancelled) { notify(`Duplicated as “${r.title}”.`); load(); }
+    } catch (e) { notify(errorText(e), true); }
+  };
 
   return (
     <>
@@ -55,7 +66,21 @@ export function Projects() {
                 <span className="mono muted path">{r.path}</span>
               </span>
             </button>
-            <button className="btn small ghost" onClick={() => forget(r.path)} aria-label={`Remove ${r.title} from the list`}>Remove from list</button>
+            {renaming?.path === r.path ? (
+              <div className="row" style={{ margin: "0 12px 12px" }}>
+                <input type="text" value={renaming.title} autoFocus aria-label="New project title" style={{ flex: 1 }}
+                  onChange={(e) => setRenaming({ path: r.path, title: e.target.value })}
+                  onKeyDown={(e) => { if (e.key === "Enter") rename(); if (e.key === "Escape") setRenaming(null); }} />
+                <button className="btn small primary" onClick={rename}>Save</button>
+                <button className="btn small ghost" onClick={() => setRenaming(null)}>Cancel</button>
+              </div>
+            ) : (
+              <div className="row card-actions">
+                <button className="btn small ghost" disabled={!r.exists} onClick={() => setRenaming({ path: r.path, title: r.title })}>Rename</button>
+                <button className="btn small ghost" disabled={!r.exists} onClick={() => duplicate(r.path)}>Duplicate…</button>
+                <button className="btn small ghost" onClick={() => forget(r.path)} aria-label={`Remove ${r.title} from the list`}>Remove from list</button>
+              </div>
+            )}
           </article>
         ))}
       </div>

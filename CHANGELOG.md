@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.1.0 — Phase 5: polish and delivery (2026-11-20)
+
+First complete release. Full notes, acceptance matrix and benchmarks: docs/RELEASE_NOTES.md.
+
+### Added
+- Storage audit (CLI `storage audit`, studio Settings): sizes, free space, system-drive marking, and detection of stray NoorVox data in
+  unconfigured default locations.
+- Support bundle (CLI `diagnostics bundle`, studio Settings): versions, settings (project paths reduced), audit, models, workers, recent logs.
+  Never scripts or audio.
+- Project rename and duplicate (CLI and studio project cards).
+- Installer: `Install.ps1` / `Uninstall.ps1` in the release zip (per user, any drive, shortcuts, optional portable mode, data never deleted).
+- Docs: MODEL_BACKENDS.md, STORAGE_AND_PRIVACY.md, RELEASE_NOTES.md.
+
+### Improved
+- Batch jobs: segment index plus an append-only job journal instead of rewriting the whole job file per segment. A 2,000-segment job's overhead
+  dropped from 35.1 s to 25.8 s, and a re-run that reuses takes from 10.9 s to 1.0 s. Crash safety is unchanged (journal replay, torn-line tolerant).
+- Accessibility: WCAG AA contrast for all six themes (Nocturne accent adjusted to #8152f0) with a test; reduced-motion support; nav buttons keep
+  accessible names when the sidebar collapses; layout checked at 150 %/200 % scaling.
+- Version 0.1.0.
+
 ## 0.1.0-dev — Phase 4: assembly, subtitles, timing manifests (2026-11-20)
 
 ### Implemented and tested

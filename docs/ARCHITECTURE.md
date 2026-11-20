@@ -1,4 +1,4 @@
-# NoorVox architecture (as implemented, v0.1.0-dev / Phases 1–4)
+# NoorVox architecture (as implemented, 0.1.0)
 
 Decisions and measurements: [ADR-0001](adr/0001-kokoro-backend-and-worker-model.md). Target design: [design/NOORVOX_DESIGN.md](design/NOORVOX_DESIGN.md).
 
@@ -80,6 +80,15 @@ become `interrupted` and resumable. `tools/studio-smoke-projects.mjs` exercises 
 
 Studio: `projects.assemble` (checks approvals before the folder dialog, so the user isn't sent through a picker for nothing) and
 `projects.revealOutput`, which only opens folders containing a NoorVox manifest or `clips.json`.
+
+## Delivery (Phase 5)
+
+| Piece | Responsibility |
+|---|---|
+| `StorageAudit` | Read-only audit of every location plus stray-data detection in default locations (`%LOCALAPPDATA%\NoorVox`, `%APPDATA%\NoorVox`, `Documents\NoorVox`, `<exe>\data`). |
+| `SupportBundle` | Zip of environment, reduced settings, audit, models, workers and log tails. Explicitly excludes project content. |
+| Job journal | `<jobId>.journal`: one JSON line per finished item between snapshots (every 50 items or 5 s); `Load` replays it over the snapshot and ignores a torn last line. |
+| `tools/installer` | `Install.ps1` (per user, copies, shortcuts, optional `noorvox.portable`) and `Uninstall.ps1` (removes the program and shortcuts, keeps data). |
 
 ## Storage (`Core/Storage`)
 

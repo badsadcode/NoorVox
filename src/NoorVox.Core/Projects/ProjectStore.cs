@@ -90,6 +90,43 @@ public sealed partial class ProjectStore
 
     public void Reload() => Project = Json.ReadFile<ProjectFile>(ProjectPath);
 
+    public void Rename(string title)
+    {
+        if (string.IsNullOrWhiteSpace(title)) throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "A project needs a title.");
+        MutateProject(p => p.Title = title.Trim());
+    }
+
+    /// <summary>
+    /// Copies the project to a new (empty) folder with a new id: scripts, takes (so approvals stay valid), references and
+    /// pronunciation. Job history, locks, temp audio and exports stay with the original.
+    /// </summary>
+    public ProjectStore Duplicate(string destination, string? title = null)
+    {
+        var dest = Path.GetFullPath(destination);
+        if (Directory.Exists(dest) && Directory.EnumerateFileSystemEntries(dest).Any())
+            throw new NoorVoxException(ErrorCodes.OutputExists, ExitCode.IoError, $"{dest} is not empty. Choose a new or empty folder.", new { path = dest });
+        if (dest.StartsWith(Root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "A project can't be duplicated into itself.");
+        Reload();
+        foreach (var file in Directory.EnumerateFiles(Root, "*", SearchOption.AllDirectories))
+        {
+            var rel = Path.GetRelativePath(Root, file);
+            var top = rel.Split(Path.DirectorySeparatorChar)[0];
+            if (top is ".noorvox" or "exports") continue;
+            var target = Path.Combine(dest, rel);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(file, target);
+            File.SetAttributes(target, File.GetAttributes(file)); // keep references read-only
+        }
+        foreach (var d in new[] { "exports", Path.Combine(".noorvox", "jobs") }) Directory.CreateDirectory(Path.Combine(dest, d));
+        var copy = Json.ReadFile<ProjectFile>(Path.Combine(dest, ProjectFileName));
+        copy.ProjectId = Guid.NewGuid().ToString("N")[..12];
+        copy.Title = string.IsNullOrWhiteSpace(title) ? $"{Project.Title} (copy)" : title.Trim();
+        copy.CreatedAt = copy.ModifiedAt = DateTimeOffset.Now;
+        FileUtil.WriteAllTextAtomic(Path.Combine(dest, ProjectFileName), Json.Serialize(copy));
+        return Open(dest);
+    }
+
     // ------------------------------------------------------------------ locking & mutation
 
     /// <summary>Cross-process write lock (short-lived). Readers never lock: files are replaced atomically.</summary>
@@ -126,7 +163,7 @@ public sealed partial class ProjectStore
     public IEnumerable<SectionFile> LoadSections() => Project.Sections.Select(s => LoadSection(s.SectionId));
 
     /// <summary>Read-modify-write of one section file under the project lock (reads the latest copy from disk).</summary>
-    public T MutateSection<T>(string sectionId, Func<SectionFile, T> change)
+    public T MutateSection<T>(string sectionId, Func<SectionFile, T> change, bool touchProject = true)
     {
         using var _ = WriteLock();
         Reload();
@@ -135,6 +172,7 @@ public sealed partial class ProjectStore
         var file = Json.ReadFile<SectionFile>(path);
         var result = change(file);
         FileUtil.WriteAllTextAtomic(path, Json.Serialize(file));
+        if (!touchProject && file.Title == r.Title) return result;
         var fresh = Json.ReadFile<ProjectFile>(ProjectPath);
         fresh.ModifiedAt = DateTimeOffset.Now;
         var title = fresh.Sections.First(s => s.SectionId == sectionId);

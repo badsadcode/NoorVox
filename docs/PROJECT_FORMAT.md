@@ -1,7 +1,7 @@
 # NoorVox project format (schemaVersion 1)
 
 A NoorVox project is a **folder of readable JSON plus WAV files**. There's no database, so you can version it with git (minus audio),
-back it up, or edit the scripts by hand. This document describes the format as implemented in v0.1.0-dev.
+back it up, or edit the scripts by hand. This document describes the format as implemented in NoorVox 0.1.0.
 Sources: `src/NoorVox.Core/Projects/*.cs`.
 
 ```text
@@ -58,7 +58,7 @@ Every project has the same three levels. The **kind** (template) only changes la
   "pauses": { "betweenSegmentsMs": 350, "betweenScenesMs": 900, "sectionEdgeMs": 1500 },
   "speakers": [ { "speakerId": "narrator", "name": "Narrator", "voiceId": null, "speed": null } ],
   "sections": [ { "sectionId": "ep01", "title": "Episode 1 – The Terrible Idea", "file": "scripts/ep01.json" } ],
-  "generator": "NoorVox 0.1.0-dev"
+  "generator": "NoorVox 0.1.0"
 }
 ```
 
@@ -112,7 +112,7 @@ Every project has the same three levels. The **kind** (template) only changes la
   "durationMs": 4998, "sampleRate": 24000, "samples": 119952,
   "createdAt": "2026-11-20T17:04:35+01:00",
   "jobId": "job_20261120_170431_1a2b",
-  "generator": "NoorVox 0.1.0-dev"
+  "generator": "NoorVox 0.1.0"
 }
 ```
 

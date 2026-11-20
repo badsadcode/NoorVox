@@ -126,6 +126,23 @@ public static class Commands
             $"Updated {changed.Count} storage path(s). Existing files were not moved."));
     }
 
+    public static Task<CommandResult> StorageAudit(CommandContext ctx) => Task.Run(() =>
+    {
+        var r = NoorVox.Core.Storage.StorageAudit.Run(Storage());
+        return new CommandResult(r, $"{r.Paths.Count - 1} locations, {r.TotalBytes / 1048576.0:0} MB used" +
+            (r.Strays.Count > 0 ? $"; {r.Strays.Count} stray location(s) with NoorVox data outside your settings" : "; no stray NoorVox data found") + ".",
+            r.Strays.Select(x => $"Stray NoorVox data: {x.Path} ({x.Bytes / 1048576.0:0.0} MB, {x.Note})").ToList());
+    }, ctx.Ct);
+
+    public static async Task<CommandResult> DiagnosticsBundle(CommandContext ctx)
+    {
+        var s = Storage();
+        var path = ctx.Args.Get("out") ?? Path.Combine(s.Resolve(StorageKind.Exports).Path, $"noorvox-support-{DateTime.Now:yyyyMMdd_HHmmss}.zip");
+        using var sup = Supervisor(s);
+        var zip = await NoorVox.Core.Diagnostics.SupportBundle.CreateAsync(s, sup, path, "noorvox.exe", ctx.Ct);
+        return new CommandResult(new { path = zip, bytes = new FileInfo(zip).Length }, $"Support bundle written to {zip}. It contains no scripts or audio; review before sharing.");
+    }
+
     // ---------------------------------------------------------------- models
 
     public static Task<CommandResult> ModelsList(CommandContext ctx)

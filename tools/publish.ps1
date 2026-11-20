@@ -31,6 +31,8 @@ foreach ($proj in "src\NoorVox.Worker", "src\NoorVox.Cli", "src\NoorVox.Studio")
 Remove-Item (Join-Path $Output "voices") -Recurse -Force -ErrorAction SilentlyContinue
 Get-ChildItem $Output -Filter *.lib | Remove-Item -Force
 
+Copy-Item (Join-Path $PSScriptRoot "installer\Install.ps1"), (Join-Path $PSScriptRoot "installer\Uninstall.ps1") -Destination $Output -Force
+
 if ($Portable) {
     $marker = Join-Path $Output "noorvox.portable"
     if (-not (Test-Path $marker)) { Set-Content -Path $marker -Value "NoorVox portable mode: settings live in .\data" -Encoding utf8 }
@@ -40,6 +42,7 @@ $version = (& (Join-Path $Output "noorvox.exe") --version --json --quiet | Conve
 @"
 NoorVox $version — local voice studio (Bad Ideas Works)
 
+Install: right-click Install.ps1 > Run with PowerShell (or just run NoorVoxStudio.exe from this folder)
 Start:  NoorVoxStudio.exe
 CLI:    noorvox.exe --help        (docs: https://github.com/badsadcode/NoorVox/tree/main/docs)
 

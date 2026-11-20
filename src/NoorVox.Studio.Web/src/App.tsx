@@ -30,7 +30,7 @@ export function App() {
           <div><b>NoorVox</b><span>Local AI Voice Studio</span></div>
         </div>
         {nav.map(({ id, label, icon: Icon }) => (
-          <button key={id} className="nav-btn" aria-current={page === id || (id === "projects" && page === "project") ? "page" : undefined} onClick={() => go(id)}>
+          <button key={id} className="nav-btn" aria-label={label} title={label} aria-current={page === id || (id === "projects" && page === "project") ? "page" : undefined} onClick={() => go(id)}>
             <Icon /><span>{label}</span>
           </button>
         ))}

@@ -94,6 +94,21 @@ public static class ProjectCommands
         return Task.FromResult(new CommandResult(new { root = p.Root, problems }, "Project is valid."));
     }
 
+    public static Task<CommandResult> Rename(CommandContext ctx)
+    {
+        var p = Open(ctx);
+        p.Rename(ctx.Args.Require("title"));
+        return Task.FromResult(new CommandResult(new { root = p.Root, title = p.Project.Title }, $"Renamed to '{p.Project.Title}'."));
+    }
+
+    public static Task<CommandResult> Duplicate(CommandContext ctx) => Task.Run(() =>
+    {
+        var p = Open(ctx);
+        var copy = p.Duplicate(ctx.Args.Require("path"), ctx.Args.Get("title"));
+        return new CommandResult(new { root = copy.Root, projectId = copy.Project.ProjectId, title = copy.Project.Title },
+            $"Duplicated to {copy.Root} as '{copy.Project.Title}'.");
+    }, ctx.Ct);
+
     public static Task<CommandResult> Cast(CommandContext ctx)
     {
         var s = Storage();

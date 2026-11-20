@@ -166,3 +166,8 @@ export interface TakeView {
 export interface JobProgressEvent {
   path: string; jobId: string; state: string; done: number; total: number; failed: number; currentSegmentId: string | null; lastItem: JobItem | null;
 }
+
+// ---------------------------------------------------------------- storage audit (Phase 5)
+export interface AuditEntry { kind: string; path: string; source: string; drive: string | null; exists: boolean; bytes: number | null; files: number | null; freeBytes: number | null; onSystemDrive: boolean }
+export interface StrayLocation { path: string; bytes: number; files: number; note: string }
+export interface StorageAuditReport { home: string; homeMode: string; settingsFile: string; systemDrive: string; paths: AuditEntry[]; strays: StrayLocation[]; totalBytes: number; notes: string[] }

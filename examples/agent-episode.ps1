@@ -3,7 +3,7 @@
 # → verify every path and every timing in the manifest → print the manifest for the video agent.
 #
 # Usage: .\examples\agent-episode.ps1 -Script <episode.md> -ProjectDir <new project folder> [-Voice bm_george] [-Noorvox noorvox]
-# Exit code 0 = verified episode. Tested with NoorVox 0.1.0-dev (Phase 4).
+# Exit code 0 = verified episode. Tested with NoorVox 0.1.0.
 param(
     [Parameter(Mandatory)] [string]$Script,
     [Parameter(Mandatory)] [string]$ProjectDir,

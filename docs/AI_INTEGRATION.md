@@ -1,7 +1,7 @@
 # NoorVox for AI agents (Codex & friends)
 
 You can produce narration with NoorVox **without any UI automation**. Everything below runs headless and offline once a model is
-installed, and every command block in this file has been run against v0.1.0-dev. `examples/quick-narration.ps1` is the same flow
+installed, and every command block in this file has been run against NoorVox 0.1.0. `examples/quick-narration.ps1` is the same flow
 as one script.
 
 > NoorVox speaks text; it does **not** write or fact-check the script. Another agent (or a human) prepares and approves the text.
@@ -113,7 +113,7 @@ One-shot `synth` always works.
 ## 7. Projects: batch production with resume
 
 For anything longer than a few lines, use a **project**: stable segment ids, takes you can compare, approvals, and resumable jobs.
-`examples/production.ps1` runs all of this for a documentary, an audiobook and a game-dialogue set; it was run against v0.1.0-dev (Phase 3).
+`examples/production.ps1` runs all of this for a documentary, an audiobook and a game-dialogue set; it was run against NoorVox 0.1.0.
 
 ```powershell
 $p = "E:\AI\NoorVox\Projects\NoorEngine Documentary"
@@ -145,7 +145,7 @@ Rules for agents working with projects:
 
 ## 8. Finished episode for a video agent (script → WAV + subtitles + timing manifest)
 
-`examples/agent-episode.ps1` is the whole pipeline, and it was run against v0.1.0-dev (Phase 4): Markdown script in, verified episode out.
+`examples/agent-episode.ps1` is the whole pipeline, and it was run against NoorVox 0.1.0: Markdown script in, verified episode out.
 
 ```powershell
 .\examples\agent-episode.ps1 -Script .\examples\projects\episode2.md -ProjectDir "E:\AI\NoorVox\Projects\Episode 2" -Voice bm_george

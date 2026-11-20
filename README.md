@@ -5,9 +5,12 @@
 NoorVox is a local voiceover studio for Windows: documentary narration, audiobooks, game dialogue, tutorials and quick voiceovers,
 generated **offline** with the Kokoro-82M model. It has no accounts, no paid API, and no cloud.
 
-**Status: v0.1.0-dev — Phase 4.** A headless CLI plus NoorVox Studio (WPF + WebView2 + React): projects for documentaries,
-audiobooks and game dialogue (import, takes, approvals, resumable batch generation), episode assembly with pauses, SRT/VTT subtitles and
-timing manifests for video, clip export, Quick Narration, model and voice management, and a truthful runtime monitor.
+**Status: 0.1.0, the first complete release.** A headless CLI plus NoorVox Studio (WPF + WebView2 + React):
+- projects for documentaries, audiobooks and game dialogue (import, takes, approvals, resumable batch generation);
+- episode assembly with pauses, SRT/VTT subtitles and timing manifests for video, plus clip export;
+- Quick Narration, model and voice management, a truthful runtime monitor, and a storage audit.
+
+What was verified, the acceptance matrix, benchmarks and known limitations are in **[docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md)**.
 
 ![NoorVox Studio](docs/screenshots/13-project-takes.png)
 
@@ -19,8 +22,9 @@ See [CHANGELOG.md](CHANGELOG.md) for what exists and what is still planned.
 .\tools\publish.ps1 -Output E:\Apps\NoorVox     # add -Zip for a shareable NoorVox-<version>-win-x64.zip
 ```
 
-This produces a self-contained folder (about 240 MB) with **`NoorVoxStudio.exe`** to double-click, plus `noorvox.exe` (CLI) and the worker.
-No .NET install is needed on the target PC. Building it requires the .NET 10 SDK and Node.js.
+This produces a self-contained folder (about 240 MB, a 137 MB zip) with **`NoorVoxStudio.exe`** to double-click, plus `noorvox.exe` (CLI), the
+worker and **`Install.ps1` / `Uninstall.ps1`** (per-user install, shortcuts, optional portable mode). No .NET install is needed on the target PC.
+Building it requires the .NET 10 SDK and Node.js.
 
 ## Quick start (Studio, from source)
 
@@ -52,6 +56,9 @@ Requirements: Windows 10/11 x64 and the Microsoft Edge WebView2 Runtime (studio)
 | [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | Studio walkthrough with screenshots and mockup comparison |
 | [docs/CLI_REFERENCE.md](docs/CLI_REFERENCE.md) | Every command, flag, JSON field and exit code |
 | [docs/PROJECT_FORMAT.md](docs/PROJECT_FORMAT.md) | Project folder, scripts, takes, jobs, imports, statuses |
+| [docs/MODEL_BACKENDS.md](docs/MODEL_BACKENDS.md) | Kokoro capabilities, files, performance, licenses, troubleshooting |
+| [docs/STORAGE_AND_PRIVACY.md](docs/STORAGE_AND_PRIVACY.md) | Folders, portable mode, storage audit, offline behaviour, support bundles |
+| [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md) | 0.1.0: verification, acceptance matrix, benchmarks, limitations |
 | [docs/AI_INTEGRATION.md](docs/AI_INTEGRATION.md) | Tested cookbook for Codex and other agents |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Processes, IPC, storage, installer, known limitations |
 | [docs/adr/](docs/adr/) | Decisions with measurements |

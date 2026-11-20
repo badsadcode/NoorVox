@@ -22,6 +22,11 @@ public static class CommandTable
             "noorvox storage set [--models DIR] [--cache DIR] [--temp DIR] [--projects DIR] [--exports DIR] [--webview DIR] [--json]",
             ["models", "cache", "temp", "projects", "exports", "webview"], Commands.StorageSet),
 
+        new(["storage", "audit"], "Sizes, free space and drives of every NoorVox location, plus NoorVox data found where the settings don't point (stray copies).",
+            "noorvox storage audit [--json]", [], Commands.StorageAudit),
+        new(["diagnostics", "bundle"], "Write a support zip: versions, settings, storage audit, models, workers, recent logs. Never scripts or audio.",
+            "noorvox diagnostics bundle [--out FILE.zip] [--json]", ["out"], Commands.DiagnosticsBundle),
+
         new(["models", "list"], "List installed models and catalog models (with update status).", "noorvox models list [--json]", [], Commands.ModelsList),
         new(["models", "install"], "Download, verify and install a catalog model (plus its default voice packs).",
             "noorvox models install <id[@version]> [--no-voices] [--json]", ["no-voices"], Commands.ModelsInstall),
@@ -55,6 +60,9 @@ public static class CommandTable
         new(["projects", "show"], "Project summary with per-status counts; --segments adds the full structure and every segment's status.",
             "noorvox projects show --project DIR [--segments] [--no-text] [--json]", ["project", "segments", "no-text"], ProjectCommands.Show),
         new(["projects", "validate"], "Check ids, files, speakers, voices and approved takes.", "noorvox projects validate --project DIR [--json]", ["project"], ProjectCommands.Validate),
+        new(["projects", "rename"], "Change a project's title (the folder name stays).", "noorvox projects rename --project DIR --title TITLE [--json]", ["project", "title"], ProjectCommands.Rename),
+        new(["projects", "duplicate"], "Copy a project (scripts, takes, approvals) to a new empty folder with a new id; job history and exports stay behind.",
+            "noorvox projects duplicate --project DIR --path NEWDIR [--title TITLE] [--json]", ["project", "path", "title"], ProjectCommands.Duplicate),
         new(["projects", "cast"], "Set the project's default voice, or a speaker's voice (--speaker).",
             "noorvox projects cast --project DIR [--speaker ID] --voice ID [--speed X] [--json]", ["project", "speaker", "voice", "speed"], ProjectCommands.Cast),
 

@@ -37,6 +37,7 @@ public sealed class ProjectsApi(MainWindow window, JobObject job, BridgeHost bri
     public sealed record ResumeArgs(string Path, string JobId);
     public sealed record ApproveArgs(string Path, string SegmentId, string? TakeId);
     public sealed record ExportArgs(string Path, string? SectionId, bool AllowMissing);
+    public sealed record RenameArgs(string Path, string Title);
     public sealed record AssembleArgs(string Path, string? SectionId, int? Rate, bool Normalize, bool Subtitles, bool AllowMissing);
 
     public async Task<object?> InvokeAsync(string method, JsonElement? p, CancellationToken ct) => method switch
@@ -46,6 +47,8 @@ public sealed class ProjectsApi(MainWindow window, JobObject job, BridgeHost bri
         "projects.create" => await Create(Arg<CreateArgs>(p)),
         "projects.openDialog" => await OpenDialog(),
         "projects.forget" => Forget(Arg<PathArgs>(p)),
+        "projects.rename" => Rename(Arg<RenameArgs>(p)),
+        "projects.duplicate" => await DuplicateProject(Arg<PathArgs>(p)),
         "projects.overview" => Overview(Arg<PathArgs>(p), remap: true),
         "projects.import" => await Import(Arg<PathArgs>(p)),
         "projects.updateSegment" => UpdateSegment(Arg<UpdateSegmentArgs>(p)),
@@ -128,6 +131,30 @@ public sealed class ProjectsApi(MainWindow window, JobObject job, BridgeHost bri
         var store = ProjectStore.Create(dir, a.Title, a.Kind, string.IsNullOrWhiteSpace(a.Voice) ? null : a.Voice);
         Remember(store.Root);
         return new { cancelled = false, path = store.Root };
+    }
+
+    static object Rename(RenameArgs a)
+    {
+        OpenAllowed(a.Path).Rename(a.Title);
+        return Recent();
+    }
+
+    async Task<object?> DuplicateProject(PathArgs a)
+    {
+        var p = OpenAllowed(a.Path);
+        var parentDefault = Path.GetDirectoryName(p.Root)!;
+        var parent = await Application.Current.Dispatcher.InvokeAsync(() =>
+        {
+            var dlg = new Microsoft.Win32.OpenFolderDialog { Title = $"Where should the copy of “{p.Project.Title}” go?", InitialDirectory = parentDefault };
+            return dlg.ShowDialog(window) == true ? dlg.FolderName : null;
+        });
+        if (parent is null) return new { cancelled = true };
+        var baseName = Path.GetFileName(p.Root) + " (copy)";
+        var dest = Path.Combine(parent, baseName);
+        for (int i = 2; Directory.Exists(dest) && Directory.EnumerateFileSystemEntries(dest).Any(); i++) dest = Path.Combine(parent, $"{baseName} {i}");
+        var copy = await Task.Run(() => p.Duplicate(dest));
+        Remember(copy.Root);
+        return new { cancelled = false, path = copy.Root, title = copy.Project.Title };
     }
 
     async Task<object?> OpenDialog()

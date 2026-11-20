@@ -48,6 +48,8 @@ public sealed class StudioApi(MainWindow window, JobObject job, BridgeHost bridg
         "narration.export" => await Export(Arg<ExportArgs>(p)),
         "narration.reveal" => RevealFile(Arg<PathArgs>(p)),
         "settings.set" => SettingsSet(Arg<SettingsArgs>(p)),
+        "storage.audit" => await Task.Run(() => (object)StorageAudit.Run(S()), ct),
+        "diagnostics.bundle" => await Bundle(ct),
         "shell.openUrl" => OpenUrl(Arg<UrlArgs>(p)),
         _ => throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, $"Unknown bridge method '{method}'."),
     };
@@ -166,6 +168,27 @@ public sealed class StudioApi(MainWindow window, JobObject job, BridgeHost bridg
         if (a.DefaultVoice is not null) s.Settings.DefaultVoice = a.DefaultVoice.Length == 0 ? null : a.DefaultVoice;
         s.Save();
         return AppInfo();
+    }
+
+    async Task<object?> Bundle(CancellationToken ct)
+    {
+        var s = S();
+        var exports = s.Resolve(StorageKind.Exports).Path;
+        Directory.CreateDirectory(exports);
+        var target = await Application.Current.Dispatcher.InvokeAsync(() =>
+        {
+            var dlg = new Microsoft.Win32.SaveFileDialog
+            {
+                Title = "Save support bundle", InitialDirectory = exports, FileName = $"noorvox-support-{DateTime.Now:yyyyMMdd_HHmmss}.zip",
+                DefaultExt = ".zip", Filter = "Zip archive (*.zip)|*.zip", OverwritePrompt = true,
+            };
+            return dlg.ShowDialog(window) == true ? dlg.FileName : null;
+        });
+        if (target is null) return new { cancelled = true };
+        using var sup = Sup(s);
+        var zip = await NoorVox.Core.Diagnostics.SupportBundle.CreateAsync(s, sup, target, "NoorVoxStudio.exe", ct);
+        Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{zip}\"") { UseShellExecute = true });
+        return new { cancelled = false, path = zip };
     }
 
     static object OpenUrl(UrlArgs a)

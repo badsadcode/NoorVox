@@ -1,6 +1,6 @@
 # NoorVox example: headless narration of a few lines with a warm worker, verified output, clean shutdown.
 # Usage:  .\examples\quick-narration.ps1 [-Noorvox <path to noorvox.exe>] [-OutDir <folder>]
-# Tested with NoorVox 0.1.0-dev. Exits non-zero on any failure.
+# Tested with NoorVox 0.1.0. Exits non-zero on any failure.
 param(
     [string]$Noorvox = "noorvox",
     [string]$OutDir = (Join-Path ([IO.Path]::GetTempPath()) "noorvox-example"),

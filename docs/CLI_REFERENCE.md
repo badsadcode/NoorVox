@@ -1,7 +1,7 @@
 # NoorVox CLI reference
 
 `noorvox.exe` is the headless interface to NoorVox. It never starts WebView2, and it never prompts.
-This document covers **what is implemented in v0.1.0-dev (Phases 1–4)**. Anything not listed here does not exist yet.
+This document covers **what is implemented in NoorVox 0.1.0**. Anything not listed here does not exist yet.
 
 - Machine-readable help: `noorvox --help --json` (commands, options, exit codes).
 - Contract version: envelope `schemaVersion: 1`.
@@ -25,7 +25,7 @@ This document covers **what is implemented in v0.1.0-dev (Phases 1–4)**. Anyth
 {
   "schemaVersion": 1,
   "tool": "noorvox",
-  "toolVersion": "0.1.0-dev",
+  "toolVersion": "0.1.0",
   "command": "synth",
   "success": true,
   "code": "ok",
@@ -72,6 +72,16 @@ For each one it reports `path`, `source` (`configured` / `default…`), `drive`,
 ### `noorvox storage set [--models DIR] [--cache DIR] [--temp DIR] [--projects DIR] [--exports DIR] [--webview DIR]`
 Each path is created, checked by writing a probe file, and saved. Pass the value `default` to reset one path.
 Existing files are **not moved**. C: is allowed.
+
+### `noorvox storage audit`
+Every storage location (plus the home) with `path`, `source`, `drive`, `exists`, `bytes`, `files`, `freeBytes` and `onSystemDrive`,
+plus `strays[]`: NoorVox data found in default locations that the current settings don't use (`path`, `bytes`, `files`, `note`).
+Each stray is also listed in `warnings`. Read-only. See STORAGE_AND_PRIVACY.md.
+
+### `noorvox diagnostics bundle [--out FILE.zip]`
+Writes a support zip with `environment.json`, `settings.json` (recent project paths reduced to folder names), `storage-audit.json`,
+`models.json`, `workers.json`, `logs/` (last 1 MB of each NoorVox log) and `README.txt`. It never includes scripts, text, audio or project files.
+Default: `<exports>\noorvox-support-<timestamp>.zip`. `data`: `path`, `bytes`.
 
 ### `noorvox models list`
 `data.installed[]` lists installed models: `reference`, `path`, `modelSha256`, `license`, `source`, `origin` (`download`/`import`), `voices` (count) and `voicePacks`.
@@ -193,6 +203,13 @@ latestTakeId, durationMs, notes`. `--no-text` omits the text fields.
 Checks section files, unique and valid ids, known speakers, speed range, approved takes existing on disk, and that the voices used are installed.
 On problems it exits 5 with `data.problems[]`.
 
+### `noorvox projects rename --project DIR --title TITLE`
+Changes the title in `noorvox.project.json`. The folder isn't renamed.
+
+### `noorvox projects duplicate --project DIR --path NEWDIR [--title TITLE]`
+Copies scripts, takes (so approvals stay valid), references and pronunciation to an empty `NEWDIR`, with a new `projectId`.
+The title defaults to "<title> (copy)". Job history, locks, temp audio and `exports\` aren't copied. `data`: `root`, `projectId`, `title`.
+
 ### `noorvox projects cast --project DIR [--speaker ID] --voice ID [--speed X]`
 Without `--speaker`, sets the project default voice (and speed). With `--speaker`, sets that character's voice. Approved takes are untouched;
 affected segments become `stale` until regenerated and approved.
@@ -271,7 +288,7 @@ Joins each section's approved takes into **one WAV** (all sections if `--section
 
 ```json
 {
-  "schemaVersion": 1, "kind": "noorvox.assembly", "generator": "NoorVox 0.1.0-dev",
+  "schemaVersion": 1, "kind": "noorvox.assembly", "generator": "NoorVox 0.1.0",
   "project": { "projectId": "…", "title": "NoorEngine Documentary", "kind": "documentary", "root": "E:\\…" },
   "section": { "sectionId": "ep01", "title": "Episode 1 – The Terrible Idea" },
   "audio": { "file": "E:\\…\\ep01_episode_1_the_terrible_idea.wav", "sampleRate": 48000, "channels": 1, "bitsPerSample": 16,

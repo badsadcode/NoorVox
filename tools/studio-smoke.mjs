@@ -102,6 +102,18 @@ try {
   }
   await js(`document.documentElement.dataset.theme = "nocturne"; return true;`);
 
+  // High-DPI: a 1440x900 window at 150 % / 200 % scaling leaves 960 / 720 CSS pixels. Nothing may overflow sideways.
+  for (const scale of [1.5, 2]) {
+    await send("Emulation.setDeviceMetricsOverride", { width: Math.round(1440 / scale), height: Math.round(900 / scale), deviceScaleFactor: scale, mobile: false });
+    for (const page of ["narrate", "monitor", "settings"]) {
+      await go(page);
+      const overflow = await js(`return document.documentElement.scrollWidth - document.documentElement.clientWidth;`);
+      check(`no horizontal overflow at ${scale * 100}% scaling (${page})`, overflow <= 0, `${overflow}px`);
+      if (page === "narrate") await shot(`07-dpi-${scale * 100}-${page}`);
+    }
+  }
+  await send("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+
   // Generate again (engine restarts with model), then quit like a user: graceful WM_CLOSE.
   await go("narrate");
   await clickText("button", "Generate narration");

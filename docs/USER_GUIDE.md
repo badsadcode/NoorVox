@@ -1,11 +1,17 @@
-# NoorVox Studio — user guide (v0.1.0-dev)
+# NoorVox Studio — user guide (0.1.0)
 
 NoorVox Studio turns text into narration on your own PC. There is no account, cloud or paid credits, and after a one-time model
 download it works offline. All screenshots below are of the real application (captured by `tools/studio-smoke.mjs`).
 
-## Starting
+## Installing and starting
 
-Run `NoorVoxStudio.exe`. To build it from source, see the README. Only one studio runs at a time.
+Extract `NoorVox-0.1.0-win-x64.zip`, right-click **Install.ps1 → Run with PowerShell**, and answer two questions:
+- **Install folder:** any drive; C: is fine.
+- **Portable mode:** keeps the settings inside that folder.
+
+You get Start-menu and desktop shortcuts. You can also simply run `NoorVoxStudio.exe` from the extracted folder.
+`Uninstall.ps1` in the install folder removes the program and shortcuts, and leaves your models and projects alone.
+Only one studio runs at a time.
 
 ### First run
 
@@ -22,6 +28,8 @@ Run `NoorVoxStudio.exe`. To build it from source, see the README. Only one studi
 
 Use a project for anything bigger than a quick line: a documentary episode, an audiobook, or a set of game dialogue.
 
+- **Rename** and **Duplicate…** are on each project card. Duplicate copies the scripts, takes and approvals into a new folder,
+  for trying a different cast or edit without touching the original.
 - **New project:** give it a name, pick a template (Documentary, Audiobook, Game dialogue, Narration, Education, Custom) and a narrator voice,
   then choose where the folder goes. A project is a normal folder (see `PROJECT_FORMAT.md`), so you can back it up or move it.
 - **Import script…:** Markdown or text (`# Episode` / `# Chapter`, `## Scene`, paragraphs become segments; `<!-- notes -->` are kept as
@@ -112,6 +120,22 @@ Only NoorVox-managed workers appear here. NoorVox never touches other programs' 
 | ![Daylight](screenshots/06-theme-daylight.png) | ![Tape Deck](screenshots/06-theme-tape.png) |
 | ![Thalassa](screenshots/06-theme-thalassa.png) | ![Graphite](screenshots/06-theme-graphite.png) |
 | ![Purple Heart](screenshots/06-theme-lavender.png) | |
+
+### Storage audit and support bundle
+
+Settings → **Storage audit & diagnostics**:
+- **Run storage audit** shows every NoorVox folder with its size and free space. It also warns about NoorVox data in places your settings
+  don't use, such as a leftover first run with default paths. It never deletes anything.
+- **Create support bundle…** saves a zip for troubleshooting: versions, settings, the audit, installed models and recent logs.
+  It never includes your scripts or audio.
+
+## Accessibility
+
+- Every theme meets WCAG AA contrast (4.5:1) for text, muted text, status colours and button text; a test enforces it.
+- Worker and segment states always use an icon plus a word, never colour alone.
+- Keyboard: Tab through every control; Ctrl+Enter generates in Quick Narration; Enter saves a rename, Escape cancels; Escape closes confirmations.
+- "Reduce motion" in Windows turns off spinners and transitions.
+- At high scaling the sidebar collapses to icons, which keep their names for screen readers and as tooltips.
 
 ## Compared with the concept mockup
 

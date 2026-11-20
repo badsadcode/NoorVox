@@ -1,5 +1,5 @@
 {
-  "when": "2026-11-20T16:06:00.085Z",
+  "when": "2026-11-20T17:42:57.988Z",
   "results": [
     {
       "name": "UI loads with real voices",
@@ -14,12 +14,12 @@
     {
       "name": "real narration generated in GUI",
       "ok": true,
-      "detail": "15.4 s measuredGeorge · 1.00×24 kHz · 16-bit monogenerated in 3.9 s (CPU) (5.5 s incl. engine start)"
+      "detail": "15.4 s measuredGeorge · 1.00×24 kHz · 16-bit monogenerated in 3.3 s (CPU) (4.7 s incl. engine start)"
     },
     {
       "name": "engine is ready with model loaded",
       "ok": true,
-      "detail": "state=ready pid=57524"
+      "detail": "state=ready pid=20476"
     },
     {
       "name": "studio engine is bound to the studio (stop-on-exit default)",
@@ -34,12 +34,42 @@
     {
       "name": "unload recycles to a new process",
       "ok": true,
-      "detail": "pid 57524 → 60228, memory 983 MB → 47 MB"
+      "detail": "pid 20476 → 41412, memory 1002 MB → 46 MB"
+    },
+    {
+      "name": "no horizontal overflow at 150% scaling (narrate)",
+      "ok": true,
+      "detail": "0px"
+    },
+    {
+      "name": "no horizontal overflow at 150% scaling (monitor)",
+      "ok": true,
+      "detail": "0px"
+    },
+    {
+      "name": "no horizontal overflow at 150% scaling (settings)",
+      "ok": true,
+      "detail": "0px"
+    },
+    {
+      "name": "no horizontal overflow at 200% scaling (narrate)",
+      "ok": true,
+      "detail": "0px"
+    },
+    {
+      "name": "no horizontal overflow at 200% scaling (monitor)",
+      "ok": true,
+      "detail": "0px"
+    },
+    {
+      "name": "no horizontal overflow at 200% scaling (settings)",
+      "ok": true,
+      "detail": "0px"
     },
     {
       "name": "second generate reloads engine",
       "ok": true,
-      "detail": "pid=60228"
+      "detail": "pid=41412"
     },
     {
       "name": "studio closes cleanly",
@@ -49,7 +79,7 @@
     {
       "name": "no worker left consuming resources after close",
       "ok": true,
-      "detail": "worker pid 60228 gone"
+      "detail": "worker pid 41412 gone"
     }
   ]
 }
