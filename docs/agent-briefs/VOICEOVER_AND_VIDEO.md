@@ -65,14 +65,16 @@ Pick the engine from what is installed and what the user asked for:
 ```markdown
 # Episode title                      ← a section (an episode or chapter); one per file is typical
 ## Scene title                       ← a scene
+<!-- visual: E:\path\to\sources\img\editor.png -->
 First paragraph = one segment: one to three sentences, spoken as one take.
-<!-- visual: screenshot of the editor with the triangle (sources/img/triangle.png) -->
 
+<!-- visual: screenshot of the editor with the triangle (E:\path\to\sources\img\triangle.png) -->
 Next paragraph = the next segment.
 ```
 
-   - `<!-- visual: … -->` comments are never spoken. They become `notes` in the timing manifest and drive the video step, so add one
-     to every segment that needs a specific image, naming the source file when there is one.
+   - A `<!-- visual: … -->` comment belongs to the paragraph **after** it, so put it on the line above the segment it illustrates.
+     Comments are never spoken. They become that segment's `notes` in the timing manifest and drive the video step: give every
+     segment that needs a specific picture its own comment, with the full path of the source image when there is one.
    - For several characters, use a dialogue CSV instead (`line_id,character,text,notes`; see AI_INTEGRATION.md §7).
 5. List names, numbers and terms the engine may mispronounce ("NoorEngine" → "Noor Engine", "GLB" → "G L B", "0.3.1" → "three point
    one") for step 3. Version numbers, abbreviations and product names almost always need a rule.
@@ -122,12 +124,26 @@ Never re-time anything from text length: the manifest is exact to the segment.
 
 NoorVox makes audio, subtitles and timings; the picture is made with **ffmpeg** using those timings. If `ffmpeg` isn't installed, ask
 the user (Windows: `winget install --id Gyan.FFmpeg`), or deliver audio + subtitles + `shotlist.md` and say the video step is pending.
+Right after a winget install, shells that were already open don't have it on PATH; pass the exe explicitly:
+
+```powershell
+$ff = (Get-Command ffmpeg -ErrorAction SilentlyContinue).Source
+if (-not $ff) { $ff = (Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Recurse -Filter ffmpeg.exe | Select-Object -First 1).FullName }
+```
 
 `tools\make-video.ps1` in the NoorVox repo does this from the manifest:
 
 ```powershell
 & E:\Codex\NoorVox\tools\make-video.ps1 -Manifest $manifestPath -Images (Join-Path $out "visuals") -Out (Join-Path $out "video.mp4") `
-    -Width 1920 -Height 1080 -Subtitles burn        # or: -Subtitles soft (toggleable track) / none
+    -Width 1920 -Height 1080 -Subtitles burn -FFmpeg $ff      # or: -Subtitles soft (toggleable track) / none
+```
+
+It prints JSON: `durationMatches` (video vs audio within 150 ms), and per segment which picture it used (`image`, `previous`,
+`title card`): list the `previous`/`title card` ones in the report as places that could use a better visual. It never overwrites
+`-Out`; a failed run leaves no file.
+
+```text
+Tested on the dev PC with ffmpeg 9.1: a 58.7 s, 6-segment piece → 1920×1080 H.264 + AAC in 8 s, durations equal to the millisecond.
 ```
 
 How it picks a picture for each segment, in order:
@@ -139,7 +155,7 @@ Each image is shown from the segment's `startMs` to the next segment's `startMs`
 Prepare `visuals/` yourself: copy the relevant source images, renamed to segment ids; screenshots or diagrams the user provided
 are better than anything generated. Don't fabricate screenshots of real products.
 
-Verify the result with `ffprobe`: duration within 100 ms of `audio.durationMs`, one video and one audio stream (plus a subtitle
+Verify the result with `ffprobe` (the script already did): duration within 150 ms of `audio.durationMs`, one video and one audio stream (plus a subtitle
 stream for `soft`).
 
 ## 6. Deliver and report

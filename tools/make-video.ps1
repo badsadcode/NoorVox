@@ -19,6 +19,13 @@ param(
     [string]$FFmpeg = "ffmpeg"
 )
 $ErrorActionPreference = "Stop"
+# Native tools write progress to stderr; in Windows PowerShell 5.1 a redirected stderr line becomes an error record, so the
+# ffmpeg calls below run quietly (-nostats -loglevel error) and are judged by their exit codes only.
+function Invoke-Native([string]$exe, [string[]]$arguments) {
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    try { $text = & $exe @arguments 2>&1 | Out-String } finally { $ErrorActionPreference = $prev }
+    [pscustomobject]@{ Code = $LASTEXITCODE; Text = $text.Trim() }
+}
 if (-not (Get-Command $FFmpeg -ErrorAction SilentlyContinue)) { throw "ffmpeg not found. Install it (winget install --id Gyan.FFmpeg) or pass -FFmpeg <path>." }
 $Out = [IO.Path]::GetFullPath($Out)
 if (Test-Path $Out) { throw "$Out already exists; choose another name (this script never overwrites)." }
@@ -55,9 +62,9 @@ function New-TitleCard([string]$title, [int]$n) {
     Push-Location $work
     try {
         $fontArg = if ($font) { "fontfile='" + ($font -replace '\\', '/' -replace ':', '\:') + "':" } else { "" }
-        & $FFmpeg -hide_banner -loglevel error -f lavfi -i "color=c=$($Background):s=$($Width)x$($Height)" -frames:v 1 `
-            -vf "drawtext=$($fontArg)textfile=card$n.txt:fontcolor=white:fontsize=$([int]($Height / 14)):x=(w-text_w)/2:y=(h-text_h)/2" $png
-        if ($LASTEXITCODE -ne 0) { throw "ffmpeg failed to draw a title card." }
+        $r = Invoke-Native $FFmpeg @("-hide_banner", "-nostats", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=$($Background):s=$($Width)x$($Height)",
+            "-frames:v", "1", "-vf", "drawtext=$($fontArg)textfile=card$n.txt:fontcolor=white:fontsize=$([int]($Height / 14)):x=(w-text_w)/2:y=(h-text_h)/2", $png)
+        if ($r.Code -ne 0) { throw "ffmpeg failed to draw a title card: $($r.Text)" }
     } finally { Pop-Location }
     return $png
 }
@@ -94,23 +101,27 @@ $srt = if ($m.subtitles.srt) { Resolve-Rel $m.subtitles.srt } else { $null }
 if ($Subtitles -ne "none" -and -not ($srt -and (Test-Path $srt))) { Write-Warning "No SRT in the manifest; making the video without subtitles."; $Subtitles = "none" }
 if ($Subtitles -eq "burn") {
     Copy-Item $srt (Join-Path $work "subs.srt")                         # relative name: avoids Windows path escaping in the filter
-    $vf += ",subtitles=subs.srt:force_style='FontName=Segoe UI,FontSize=22,Outline=1,Shadow=0,MarginV=36'"
+    # libass sizes against a 288-line virtual screen: 12 ≈ 4 % of the picture height. BorderStyle=3 = a translucent box behind the text.
+    $vf += ",subtitles=subs.srt:force_style='FontName=Segoe UI,FontSize=12,BorderStyle=3,Outline=1,Shadow=0,OutlineColour=&H8C000000,MarginV=14'"
 } elseif ($Subtitles -eq "soft") {
     $inputs += @("-i", $srt)
     $maps += @("-map", "2:s", "-c:s", "mov_text", "-metadata:s:s:0", "language=eng")
 }
 
 New-Item -ItemType Directory -Force (Split-Path $Out) | Out-Null
+$partial = "$Out.partial"
 Push-Location $work
 try {
-    & $FFmpeg -hide_banner -loglevel error -stats @inputs @maps -vf $vf -c:v libx264 -preset medium -crf 18 -c:a aac -b:a 192k `
-        -t ((([double]$m.audio.durationMs) / 1000).ToString("0.###", [Globalization.CultureInfo]::InvariantCulture)) -movflags +faststart $Out
-    if ($LASTEXITCODE -ne 0) { throw "ffmpeg failed (exit $LASTEXITCODE)." }
+    $seconds = (([double]$m.audio.durationMs) / 1000).ToString("0.###", [Globalization.CultureInfo]::InvariantCulture)
+    $r = Invoke-Native $FFmpeg (@("-hide_banner", "-nostats", "-loglevel", "error") + $inputs + $maps + @("-vf", $vf, "-c:v", "libx264", "-preset", "medium",
+        "-crf", "18", "-c:a", "aac", "-b:a", "192k", "-t", $seconds, "-movflags", "+faststart", "-f", "mp4", $partial))
+    if ($r.Code -ne 0) { Remove-Item $partial -ErrorAction SilentlyContinue; throw "ffmpeg failed (exit $($r.Code)): $($r.Text)" }
+    Move-Item $partial $Out                                             # only a finished video gets the real name
 } finally { Pop-Location }
 
 # Check the result against the manifest (measured, not assumed).
 $probe = if (Get-Command ffprobe -ErrorAction SilentlyContinue) { "ffprobe" } else { Join-Path (Split-Path (Get-Command $FFmpeg).Source) "ffprobe.exe" }
-$dur = [double](& $probe -v error -show_entries format=duration -of csv=p=0 $Out)
+$dur = [double]::Parse((Invoke-Native $probe @("-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", $Out)).Text, [Globalization.CultureInfo]::InvariantCulture)
 $diffMs = [math]::Abs($dur * 1000 - [double]$m.audio.durationMs)
 Remove-Item -Recurse -Force $work
 [pscustomobject]@{
