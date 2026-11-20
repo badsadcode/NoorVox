@@ -1,4 +1,4 @@
-# NoorVox Studio — user guide (0.2.0)
+# NoorVox Studio — user guide (0.3.0)
 
 NoorVox Studio turns text into narration on your own PC. There is no account, cloud or paid credits, and after a one-time model
 download it works offline. All screenshots below are of the real application (captured by `tools/studio-smoke.mjs`).
@@ -80,8 +80,15 @@ Use a project for anything bigger than a quick line: a documentary episode, an a
 
 - **Script:** type, paste or **Import text…** (.txt / .md). Your draft is saved automatically.
   The word count and *estimated* duration are only estimates. Real durations always come from the generated audio.
+- **Model:** when more than one is installed, choose Kokoro (CPU, fast) or a Qwen3-TTS model (NVIDIA GPU). The controls below change
+  to what that model can really do.
 - **Voice & delivery:** pick a voice (grouped by language) and use **Audition voice** to hear a short sample.
-  **Speed** runs from 0.5× to 2.0× (double-click resets it to 1.0×). Kokoro has no pitch, emotion or style controls, so NoorVox doesn't show any.
+  - Kokoro: **Speed** runs from 0.5× to 2.0× (double-click resets it to 1.0×). Kokoro has no pitch, emotion or style controls, so NoorVox doesn't show any.
+  - Qwen CustomVoice 1.7B: **Style directions** in plain words ("Calm, warm documentary narration with a hint of humour. Speak slowly."),
+    a **Language** choice, and **Keep seed**. There's no speed slider: ask for a pace in the style.
+  - Every Qwen take shows its **seed**. Click it to reuse it: the same seed, text and settings give exactly the same audio on this PC.
+  - Qwen Base: **Clone a voice…** creates a voice from a 5–15 s recording (WAV) and its exact transcript. You must confirm that it's your
+    own voice or that you have the speaker's permission; that statement is saved with the voice, and its takes are marked "cloned".
 - **Generate narration** (or **Ctrl+Enter**). The first generation starts the voice engine (a few seconds); after that it stays warm.
 - **Takes this session:** each generation becomes a take you can play and seek on its waveform. Each shows its *measured* duration, voice,
   speed, format and generation time. Takes survive page switches.
@@ -97,6 +104,16 @@ Previews are kept in `<Temp>\studio\previews` and removed after 3 days. Export t
 This page shows installed models with their license, source, location, size and sha256, plus their **voice packs**.
 **Install** downloads and verifies a model or voice pack, **Update to x.y** appears when a newer version exists (it installs alongside the old one),
 and **Verify files** re-hashes everything. **Change location…** moves where *new* installs go; existing files are not moved.
+
+### Qwen3-TTS and engine packs
+
+Qwen models show **NVIDIA GPU**, **style directions**, **voice cloning** and **reproducible** labels. Installing one also installs the
+**Qwen3-TTS engine** (a private Python with PyTorch, about 5.2 GB, once for all Qwen models). Every package in it is checked against
+a pinned sha256. The **Engine packs** section shows what's installed, what the engine detected (PyTorch, CUDA, your GPU), and resumes an
+interrupted install. **ONNX Runtime CUDA provider** is the optional pack that lets Kokoro run on the GPU (Settings → Voice engine).
+
+The first Qwen generation loads about 4.5 GB and prepares the GPU: from an HDD that took 81 s on the development PC. After that, lines
+generate about 2.5× faster than real time while the engine stays loaded (it unloads after the idle timeout, or with **Unload** in the Monitor).
 
 ### Blended voices
 
@@ -114,7 +131,10 @@ The truthful view of what is running:
 
 - **State** is always shown as an icon plus a word: Stopped · Starting · Running (no model) · Loading model · Ready · Generating · Stopping · Crashed · Not responding.
 - PID, uptime, loaded model and its sha256, **memory**, **CPU** (measured between two samples), execution provider, jobs done and current work.
-- **GPU** says *unavailable*: NoorVox runs on the CPU today and never shows fake zeroes.
+- **GPU memory** (Qwen): what PyTorch has reserved on the card, out of the card's total, with the free amount. It's measured by the engine
+  after each load or generation (hover for the time). **Engine memory** is the Python engine's own RAM. Kokoro shows *unavailable* for GPU
+  (on CPU there's nothing to show; on CUDA, ONNX Runtime doesn't report it). NoorVox never shows fake zeroes.
+- **Provider** is the real one: if you asked for Kokoro on CUDA and it fell back to CPU, the card says CPU and explains why.
 - **Unload model** restarts the engine process, which is the only way to really free the model's memory (roughly 1 GB → under 50 MB).
 - **Stop** lets the current job finish first. **Force stop** (asks for confirmation) terminates immediately. **Stop all** also stops engines started from the command line.
 

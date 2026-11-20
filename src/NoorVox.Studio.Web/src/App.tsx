@@ -55,7 +55,7 @@ export function App() {
           <StateBadge state={engine?.state ?? "stopped"} />
         </button>
         <span className="sep" />
-        <span>{engine?.loadedModel ? `Kokoro ${engine.loadedModel.version} · ${engine.executionProvider}` : engine ? "No model loaded · loads when you generate" : "Engine starts when you generate"}</span>
+        <span>{engine?.loadedModel ? `${engine.loadedModel.id} ${engine.loadedModel.version} · ${engine.executionProvider}` : engine ? "No model loaded · loads when you generate" : "Engine starts when you generate"}</span>
         <span className="sep" />
         <span>{workers.length} managed worker{workers.length === 1 ? "" : "s"}</span>
         <span className="grow" />

@@ -32,7 +32,11 @@ public sealed class WorkerRecord
     public int IdleTimeoutSeconds { get; set; }
 }
 
-public sealed record ResourceSnapshot(long WorkingSetBytes, long PrivateBytes, long CpuTimeMs, DateTimeOffset SampledAt, string Source, string Gpu);
+/// <param name="Gpu">How GPU use is (or isn't) measured, in words.</param>
+/// <param name="GpuMemory">GPU memory as the engine reports it (Qwen: torch.cuda); null when unavailable.</param>
+/// <param name="Sidecar">The engine helper process (Qwen's Python) and its own memory, measured live.</param>
+public sealed record ResourceSnapshot(long WorkingSetBytes, long PrivateBytes, long CpuTimeMs, DateTimeOffset SampledAt, string Source, string Gpu,
+    Backends.GpuMemoryInfo? GpuMemory = null, Backends.SidecarInfo? Sidecar = null);
 
 /// <summary>Truthful status as seen by the supervisor (spec §7.3).</summary>
 public sealed record WorkerStatusReport
@@ -196,8 +200,10 @@ public sealed class WorkerSupervisor(StorageContext storage, string workerExePat
         }
     }
 
-    static string GpuNote(string? provider) =>
-        provider is null or "CPU" ? "unavailable: CPU execution provider, no GPU in use" : "unavailable: GPU metrics not implemented";
+    static string GpuNote(string? provider, Backends.GpuMemoryInfo? gpu = null) =>
+        gpu is not null ? $"measured: {gpu.Source}"
+        : provider is null or "" or "CPU" ? "unavailable: CPU execution provider, no GPU in use"
+        : "unavailable: ONNX Runtime does not report GPU memory";
 
     static WorkerStatusReport FromRuntime(WorkerRecord rec, WorkerRuntimeStatus s) => new()
     {
@@ -215,10 +221,11 @@ public sealed class WorkerSupervisor(StorageContext storage, string workerExePat
         LoadedModel = s.LoadedModel,
         CurrentJob = s.CurrentJob,
         JobsCompleted = s.JobsCompleted,
-        Resources = new ResourceSnapshot(s.WorkingSetBytes, s.PrivateBytes, s.CpuTimeMs, s.SampledAt, "worker self-report (System.Diagnostics.Process)", GpuNote(s.ExecutionProvider)),
+        Resources = new ResourceSnapshot(s.WorkingSetBytes, s.PrivateBytes, s.CpuTimeMs, s.SampledAt, "worker self-report (System.Diagnostics.Process)",
+            GpuNote(s.ExecutionProvider, s.Gpu), s.Gpu, s.Sidecar),
         IdleTimeoutSeconds = s.IdleTimeoutSeconds,
         LogPath = rec.LogPath,
-        Error = s.LastError,
+        Error = s.LastError ?? s.ProviderNote,
     };
 
     /// <summary>Cross-process, async-safe lock serialising start/stop of one worker id (prevents duplicate workers).</summary>
@@ -349,9 +356,36 @@ public sealed class WorkerSupervisor(StorageContext storage, string workerExePat
             await RecycleAsync(id, ct);
             (rec, _) = await RequireRunningAsync(id, ct);
         }
-        await WorkerClient.CallAsync<LoadedModelInfo>(rec.PipeName, rec.Token, IpcMethods.Load, new LoadParams(model.Directory),
-            StatusConnectTimeout, TimeSpan.FromMinutes(5), ct);
+        var options = LoadOptionsFor(model);
+        // Qwen: a 4 GB model from a busy HDD plus CUDA-graph capture can take minutes (ADR-0002); Kokoro loads in seconds.
+        var timeout = model.Backend == "kokoro-onnx" ? TimeSpan.FromMinutes(5) : TimeSpan.FromMinutes(30);
+        await WorkerClient.CallAsync<LoadedModelInfo>(rec.PipeName, rec.Token, IpcMethods.Load, new LoadParams(model.Directory, options),
+            StatusConnectTimeout, timeout, ct);
         return await GetStatusAsync(id, ct);
+    }
+
+    /// <summary>Paths a backend needs beyond the model folder, resolved here so the worker never reads settings.</summary>
+    public Backends.BackendLoadOptions LoadOptionsFor(InstalledModel model)
+    {
+        var engines = new Engines.EngineRegistry(storage);
+        string? engineDir = null, script = null;
+        if (model.Manifest.Engine is { } engineId)
+        {
+            engineDir = engines.Require(engineId, model.Manifest.DisplayName).Directory;
+            script = model.Backend switch
+            {
+                "qwen3-tts" => Path.Combine(Path.GetDirectoryName(WorkerExePath)!, "engines", "qwen", "noorvox_qwen.py"),
+                _ => null,
+            };
+        }
+        if (model.Backend == "kokoro-onnx" && storage.Settings.Gpu.KokoroProvider == "cuda")
+        {
+            var ort = engines.Find(Engines.EngineIds.OrtCuda);
+            var torch = engines.Find(Engines.EngineIds.QwenTts);
+            return new Backends.BackendLoadOptions(engineDir, script, storage.CacheDir, "cuda", ort?.OrtNativeDir,
+                torch is null ? null : [torch.TorchLibDir]);
+        }
+        return new Backends.BackendLoadOptions(engineDir, script, storage.CacheDir);
     }
 
     /// <summary>"Unload": stop the worker and start a fresh one with the same id and binding, with no model loaded.</summary>

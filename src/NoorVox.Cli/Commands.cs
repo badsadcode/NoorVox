@@ -23,10 +23,12 @@ public static class Commands
 
     static WorkerSupervisor Supervisor(StorageContext s) => new(s, WorkerExe(), "cli");
 
-    static IProgress<InstallProgress> InstallProgressReporter(CommandContext ctx) => new SyncProgress<InstallProgress>(p =>
+    internal static IProgress<InstallProgress> InstallProgressReporter(CommandContext ctx) => new SyncProgress<InstallProgress>(p =>
     {
         string text = p.Stage switch
         {
+            // Engine installs pass pip's own lines through, with Done/Total counting packages rather than bytes.
+            _ when p.File is { } line && line.Contains(' ') => $"{p.Item} [{p.Done}/{p.Total}]: {line}",
             "downloading" when p.Total > 0 => $"{p.Item}: downloading {p.File} {p.Done * 100 / p.Total,3}% ({p.Done / 1048576.0:0.0}/{p.Total / 1048576.0:0.0} MB)",
             "hashing" when p.Total > 0 => $"{p.Item}: hashing {p.File} {p.Done * 100 / p.Total,3}%",
             _ => $"{p.Item}: {p.Stage} {p.File}",
@@ -157,13 +159,14 @@ public static class Commands
             {
                 id = m.Id, version = m.Version, reference = m.Reference, displayName = m.Manifest.DisplayName,
                 backend = m.Manifest.Backend, license = m.Manifest.License, source = m.Manifest.Source, origin = m.Manifest.Origin,
-                path = m.Directory, modelSha256 = m.ModelSha256, voices = m.Voices.Count,
+                path = m.Directory, modelSha256 = m.ModelSha256, voices = m.Voices.Count, capabilities = m.Capabilities, engine = m.Manifest.Engine,
                 voicePacks = m.VoicePacks.Select(p => new { p.Id, p.Version }),
                 isDefault = s.Settings.DefaultModel is { } d && (d == m.Id || d == m.Reference),
             }),
             catalog = catalog.Models.Select(c => new
             {
                 id = c.Id, version = c.Version, displayName = c.DisplayName, description = c.Description, recommended = c.Recommended,
+                capabilities = c.Capabilities ?? ModelCapabilities.Kokoro, engine = c.Engine, minVramGb = c.MinVramGb,
                 license = c.License, downloadBytes = c.Downloads.Sum(d => d.Size)
                     + c.DefaultVoicePacks.Select(catalog.FindVoicePack).Where(p => p is not null).Sum(p => p!.Downloads.Sum(d => d.Size)),
                 installed = installed.Any(m => m.Id == c.Id && m.Version == c.Version),
@@ -182,9 +185,17 @@ public static class Commands
         var catalog = ModelCatalog.LoadEmbedded();
         var model = catalog.FindModel(reference) ?? throw new NoorVoxException(ErrorCodes.UnknownModel, ExitCode.ModelMissing,
             $"'{reference}' is not in the catalog.", new { available = catalog.Models.Select(m => $"{m.Id}@{m.Version}") });
+        InstallResult? engine = null;
+        if (model.Engine is { } engineId && !ctx.Args.Has("no-engine") && new Core.Engines.EngineRegistry(s).Find(engineId) is null)
+        {
+            ctx.Info($"{model.DisplayName} needs the '{engineId}' engine pack; installing it first.");
+            engine = await new Core.Engines.EngineInstaller(s, catalog).InstallAsync(engineId, InstallProgressReporter(ctx), ctx.Ct);
+        }
         ctx.Info($"Installing {model.DisplayName} ({model.License}) into {s.ModelsDir} (staging in {s.CacheDir})");
         var result = await new ModelInstaller(s, catalog).InstallModelAsync(model, !ctx.Args.Has("no-voices"), InstallProgressReporter(ctx), ctx.Ct);
-        return new CommandResult(result, result.Status == "installed" ? $"Installed {model.Id}@{model.Version}." : $"{model.Id}@{model.Version} is already installed.");
+        if (engine is not null) result = result with { VoicePacks = [.. result.VoicePacks ?? [], engine], Warnings = engine.Warnings };
+        return new CommandResult(result, result.Status == "installed" ? $"Installed {model.Id}@{model.Version}." : $"{model.Id}@{model.Version} is already installed.",
+            result.Warnings);
     }
 
     public static async Task<CommandResult> ModelsUpdate(CommandContext ctx)
@@ -256,7 +267,7 @@ public static class Commands
     {
         var s = Storage();
         var model = new ModelRegistry(s).Resolve(ctx.Args.Get("model"));
-        var voices = KokoroVoiceNames.List(model);
+        var voices = ModelVoices.List(model);
         if (ctx.Args.Get("language") is { } lang) voices = voices.Where(v => v.Language.Equals(lang, StringComparison.OrdinalIgnoreCase)).ToList();
         return Task.FromResult(new CommandResult(new
         {
@@ -401,6 +412,10 @@ public static class Commands
             Text = text,
             VoiceId = a.Get("voice"),
             Speed = a.GetDouble("speed", 1.0),
+            Style = a.Get("style"),
+            Seed = a.Has("seed") ? long.TryParse(a.Get("seed"), out var seed) ? seed
+                : throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "--seed must be a whole number.") : null,
+            Language = a.Get("language")?.ToLowerInvariant(),
             Model = a.Get("model"),
             OutputPath = a.Get("out") ?? Path.Combine(s.Resolve(StorageKind.Exports).Path, $"noorvox_{DateTime.Now:yyyyMMdd_HHmmss}.wav"),
             Overwrite = a.Has("overwrite"),
@@ -408,7 +423,7 @@ public static class Commands
             WorkerId = a.Get("worker"),
             KeepWorker = a.Has("keep-worker"),
         }, msg => ctx.Progress(msg, force: true), ctx.Ct);
-        return new CommandResult(result, $"Wrote {result.OutputPath} ({result.DurationSeconds:0.00} s).");
+        return new CommandResult(result, $"Wrote {result.OutputPath} ({result.DurationSeconds:0.00} s)" + (result.Seed is { } sd ? $", seed {sd}." : "."));
     }
 
     static async Task<string> ReadTextFile(string path, CancellationToken ct)

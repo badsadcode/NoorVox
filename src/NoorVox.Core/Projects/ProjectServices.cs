@@ -17,14 +17,16 @@ public static class ProjectGeneration
     {
         if (job.Remaining == 0 && job.FailedCount == 0) return job;
         await using var lease = await WorkerLease.AcquireAsync(storage, supervisor, model, policy, status, ct);
-        SegmentSynthesizer synth = (text, voice, speed, output, c) => supervisor.SynthesizeAsync(lease.Id, new SynthesizeParams(text, voice, speed, output), c);
+        SegmentSynthesizer synth = (text, voice, speed, style, output, c) =>
+            supervisor.SynthesizeAsync(lease.Id, new SynthesizeParams(text, voice, speed, output, Style: style), c);
         return await new JobRunner(project, model).RunAsync(job, synth, progress, stopAfterCurrent, ct);
     }
 }
 
 public sealed record SegmentView(
     string SegmentId, string Text, string? SpeakerId, string? VoiceOverride, double? SpeedOverride, string EffectiveVoice, double EffectiveSpeed,
-    string SpokenText, string Status, int Takes, string? ApprovedTakeId, string? LatestTakeId, long? DurationMs, string? Notes);
+    string SpokenText, string Status, int Takes, string? ApprovedTakeId, string? LatestTakeId, long? DurationMs, string? Notes,
+    string? StyleOverride = null, string? EffectiveStyle = null);
 
 public sealed record SceneView(string SceneId, string Title, IReadOnlyList<SegmentView> Segments);
 public sealed record SectionView(string SectionId, string Title, IReadOnlyList<SceneView> Scenes, IReadOnlyDictionary<string, int> Counts);
@@ -65,13 +67,14 @@ public sealed record ProjectOverview(
                     var approved = takes.FirstOrDefault(t => t.TakeId == seg.ApprovedTakeId);
                     if (seg.ApprovedTakeId is not null && approved is null) warnings.Add($"{seg.SegmentId}: approved take {seg.ApprovedTakeId} is missing on disk.");
                     if (approved is not null) approvedMs += approved.DurationMs;
-                    if (model is not null && eff is not null && !model.Voices.Any(v => v.VoiceId == eff.VoiceId))
+                    if (model is not null && eff is not null && !model.HasVoice(eff.VoiceId))
                         warnings.Add($"{seg.SegmentId}: voice '{eff.VoiceId}' is not installed.");
                     counts[status] = counts.GetValueOrDefault(status) + 1;
                     all[status] = all.GetValueOrDefault(status) + 1;
                     segs.Add(new SegmentView(seg.SegmentId, includeText ? seg.Text : "", seg.SpeakerId, seg.VoiceId, seg.Speed,
                         eff?.VoiceId ?? "", eff?.Speed ?? store.Project.Defaults.Speed, includeText ? eff?.SpokenText ?? seg.Text : "",
-                        status, takes.Count, seg.ApprovedTakeId, takes.LastOrDefault()?.TakeId, (approved ?? takes.LastOrDefault())?.DurationMs, seg.Notes));
+                        status, takes.Count, seg.ApprovedTakeId, takes.LastOrDefault()?.TakeId, (approved ?? takes.LastOrDefault())?.DurationMs, seg.Notes,
+                        seg.Style, eff?.Style));
                 }
                 scenes.Add(new SceneView(sc.SceneId, sc.Title, segs));
             }
@@ -98,7 +101,11 @@ public sealed record ProjectOverview(
                 if (!ids.Add(seg.SegmentId)) problems.Add($"Duplicate segment id '{seg.SegmentId}'.");
                 if (seg.SpeakerId is not null && store.Project.Speakers.All(s => s.SpeakerId != seg.SpeakerId))
                     problems.Add($"{seg.SegmentId}: unknown speaker '{seg.SpeakerId}'.");
-                if (seg.Speed is < 0.5 or > 2.0) problems.Add($"{seg.SegmentId}: speed {seg.Speed} outside 0.5–2.0.");
+                if (seg.Speed is { } sp && (model is null ? sp is < 0.5 or > 2.0
+                        : model.Capabilities.Speed ? sp < model.Capabilities.MinSpeed || sp > model.Capabilities.MaxSpeed : Math.Abs(sp - 1.0) > 1e-9))
+                    problems.Add(model?.Capabilities.Speed == false
+                        ? $"{seg.SegmentId}: speed {sp}, but {model.Manifest.DisplayName} has no speed control."
+                        : $"{seg.SegmentId}: speed {sp} outside the model's range.");
                 if (seg.ApprovedTakeId is not null && store.Takes(seg.SegmentId).All(t => t.TakeId != seg.ApprovedTakeId))
                     problems.Add($"{seg.SegmentId}: approved take {seg.ApprovedTakeId} not found.");
             }

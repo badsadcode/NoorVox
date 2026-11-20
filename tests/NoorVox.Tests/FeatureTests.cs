@@ -64,7 +64,7 @@ public class FeatureTests : IDisposable
         Assert.All(data, v => Assert.Equal(1.5f, v, 5));                                  // 0.75·1 + 0.25·3
 
         var reloaded = ModelRegistry.ReadPackage(model.Directory);
-        var info = KokoroVoiceNames.List(reloaded).Single(v => v.Id == "bm_mynarrator");
+        var info = ModelVoices.List(reloaded).Single(v => v.Id == "bm_mynarrator");
         Assert.Equal("My Narrator!", info.DisplayName);
         Assert.Equal(VoiceBlender.CustomPackId, info.PackId);
         Assert.True(ModelRegistry.Verify(reloaded.Directory, reloaded.VoicePacks.SelectMany(p => p.Files), full: true).Ok);

@@ -62,7 +62,12 @@ Every project has the same three levels. The **kind** (template) only changes la
 }
 ```
 
-- `defaults.model`: `null` means NoorVox's default installed model; or `"kokoro-82m"` / `"kokoro-82m@1.0"`.
+- `defaults.model`: `null` means NoorVox's default installed model; or `"kokoro-82m"` / `"kokoro-82m@1.0"` / `"qwen3-tts-1.7b-customvoice"`.
+- `defaults.style` and `speakers[].style` (0.3.0, optional): delivery directions for models that take them (Qwen CustomVoice 1.7B),
+  e.g. `"Calm, warm documentary narration."`. A segment's `"style"` overrides them; `""` on a segment switches an inherited style off.
+  Ignored (and left out of the cacheKey) for models without the `style` capability. These fields are additive: schemaVersion stays 1,
+  and NoorVox 0.2 opens such projects and ignores them.
+- Qwen models have no speed control: keep `speed` at 1.0 (`projects validate` reports other values).
 - `pauses` (milliseconds) are used by `export assemble`. Generation doesn't use them. Segment `pauseBeforeMs`/`pauseAfterMs` override the adjacent gap.
 
 ## `scripts/<sectionId>.json`
@@ -116,10 +121,15 @@ Every project has the same three levels. The **kind** (template) only changes la
 }
 ```
 
-- WAV: PCM 16-bit mono at the model's native rate (24 kHz for Kokoro). `durationMs`/`samples` are measured from the file.
+0.3.0 adds two optional fields: `"style"` (the effective style the take was made with) and `"seed"` (Qwen's sampling seed; the same
+seed, text, settings, GPU and engine reproduce the take byte for byte). The seed is recorded, not part of the cacheKey: a new take of
+unchanged settings is still a new take.
+
+- WAV: PCM 16-bit mono at the model's native rate (24 kHz for Kokoro and Qwen). `durationMs`/`samples` are measured from the file.
 - A take is complete only if **both** files exist: the WAV is moved into place first, then the JSON is written atomically.
   A WAV without JSON is an interrupted write and is ignored.
-- **cacheKey** = sha256 over `v1`, spoken text (after pronunciation rules), voice, speed, model sha256 and backend id.
+- **cacheKey** = sha256 over `v1`, spoken text (after pronunciation rules), voice, speed, model sha256 and backend id, plus
+  `style:<style>` only when a style applies (so keys of takes made before 0.3.0 are unchanged).
   Kokoro's output is not bit-identical between runs, so identity is defined by inputs, never by audio hashes.
 
 ### Segment status (computed, never stored)

@@ -8,6 +8,7 @@
 ```powershell
 dotnet build NoorVox.sln
 $env:NOORVOX_TEST_MODELS_DIR = "E:\AI\NoorVox\Models"   # optional: enables real-synthesis tests (needs kokoro-82m installed there)
+$env:NOORVOX_TEST_QWEN = "1"                               # optional: also real Qwen (NVIDIA GPU + qwen-tts engine + qwen3-tts-1.7b-customvoice there; slow)
 dotnet test tests\NoorVox.Tests
 ```
 
@@ -30,8 +31,10 @@ Tests use isolated temp homes (`NOORVOX_HOME`) and never touch the user's settin
 ## Rules
 
 1. **Never kill processes by name.** Stop workers with `noorvox workers stop` / `WorkerSupervisor`, which only touch recorded, NoorVox-launched PIDs.
-2. **Don't add fake controls.** Expose only what `TtsCapabilities` says the backend supports (Kokoro: voice and speed).
-3. **No inference code outside the worker process.** Core stays backend-agnostic.
+2. **Don't add fake controls.** Expose only what the model's `capabilities` (catalog → manifest, `Core/Models/Capabilities.cs`) say it
+   supports (Kokoro: voice, speed, blending; Qwen: voice, style on 1.7B CustomVoice, cloning on Base, seed, language, no speed).
+3. **No inference code outside the worker process.** Core stays backend-agnostic. Python engines run as the worker's child process
+   (`NoorVox.Backends.Qwen`) and are installed only from hash-locked lock files (`tools/gen_engine_lock.py`), never with unpinned `pip install`.
 4. **Measured, never estimated:** durations come from WAV samples; resource numbers carry `source` + `sampledAt`; unknown = "unavailable".
 5. **C: is allowed.** Never block a path because of its drive; always show resolved paths.
 6. **Never overwrite** user audio or approved takes without an explicit flag.
@@ -43,3 +46,4 @@ Tests use isolated temp homes (`NOORVOX_HOME`) and never touch the user's settin
     process launching or arbitrary URLs to JavaScript; keep disk and process work in C#. Keep `src/NoorVox.Studio.Web/src/types.ts` in sync.
 11. **Projects:** take files are immutable and never deleted by code; approval is only a pointer; auto-approve never replaces an approval;
     every write goes through `ProjectStore` (atomic + locked). Keep `docs/PROJECT_FORMAT.md` in sync and bump `schemaVersion` for breaking changes.
+12. **Cloned voices:** creating a voice profile always needs an explicit consent statement from the user. Agents never choose one on the user's behalf.

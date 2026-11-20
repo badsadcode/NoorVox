@@ -86,12 +86,30 @@ public class InstallerTests
     }
 
     [Fact]
+    public async Task Installed_manifest_carries_capabilities_built_in_voices_and_engine()
+    {
+        using var home = new TestHome();
+        var (catalog, server, _) = Build();
+        var model = catalog.Models[0] with
+        {
+            Capabilities = new ModelCapabilities { Style = true, Seed = true },
+            BuiltInVoices = [new BuiltInVoice("aiden", "Aiden", "male", "english", "test")],
+            Engine = "qwen-tts",
+        };
+        await new ModelInstaller(home.Storage(), catalog, new HttpClient(server)).InstallModelAsync(model, false, null, CancellationToken.None);
+        var installed = new ModelRegistry(home.Storage()).Resolve("test-model");
+        Assert.True(installed.Capabilities.Style);
+        Assert.Equal("qwen-tts", installed.Manifest.Engine);
+        Assert.True(installed.HasVoice("aiden")); // regression: these fields were once dropped on install
+    }
+
+    [Fact]
     public async Task Interrupted_download_resumes_with_http_range()
     {
         using var home = new TestHome();
         var (catalog, server, weights) = Build();
         var s = home.Storage();
-        var staging = Path.Combine(s.CacheDir, "staging", "test-model-1.0");
+        var staging = Path.Combine(s.CacheDir, "staging", "test-model-1.0", "files"); // single files are staged by target path
         Directory.CreateDirectory(staging);
         File.WriteAllBytes(Path.Combine(staging, "model.onnx.part"), weights[..100_000]);
 

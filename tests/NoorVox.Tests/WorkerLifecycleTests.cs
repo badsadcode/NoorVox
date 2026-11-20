@@ -17,7 +17,7 @@ public class WorkerLifecycleTests
         var st = await sup.StartAsync("w1", boundToLauncher: false, idleTimeoutSeconds: 0, CancellationToken.None);
         Assert.Equal("idle", st.State);
         Assert.True(TestPaths.ProcessAlive(st.Pid!.Value));
-        Assert.Equal("CPU", st.ExecutionProvider);
+        Assert.Equal("", st.ExecutionProvider); // the backend (and its provider) is chosen when a model loads
         Assert.Null(st.LoadedModel);
 
         var stop = await sup.StopAsync("w1", force: false, TimeSpan.FromSeconds(15), CancellationToken.None);

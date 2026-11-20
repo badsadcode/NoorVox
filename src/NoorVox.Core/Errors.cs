@@ -44,6 +44,11 @@ public static class ErrorCodes
     public const string DownloadFailed = "download_failed";
     public const string VerificationFailed = "verification_failed";
     public const string Cancelled = "cancelled";
+    public const string EngineNotInstalled = "engine_not_installed";
+    public const string EngineBroken = "engine_broken";
+    public const string GpuRequired = "gpu_required";
+    public const string GpuOutOfMemory = "gpu_out_of_memory";
+    public const string Unsupported = "unsupported";
     public const string InternalError = "internal_error";
 }
 

@@ -10,6 +10,14 @@ public sealed class NoorVoxSettings
     public string? DefaultVoice { get; set; }
     public WorkerSettings Workers { get; set; } = new();
     public StudioSettings Studio { get; set; } = new();
+    public GpuSettings Gpu { get; set; } = new();
+}
+
+/// <summary>GPU use. Qwen engines always run on the GPU; Kokoro is CPU unless switched here (ADR-0002).</summary>
+public sealed class GpuSettings
+{
+    /// <summary><c>cpu</c> (default) or <c>cuda</c>. CUDA needs the onnxruntime-cuda and qwen-tts engine packs; falls back to CPU if unavailable.</summary>
+    public string KokoroProvider { get; set; } = "cpu";
 }
 
 /// <summary>NoorVox Studio (GUI) preferences.</summary>

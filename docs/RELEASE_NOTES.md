@@ -1,5 +1,23 @@
 # NoorVox release notes
 
+## 0.3.0 — Qwen3-TTS and the GPU
+
+- **Qwen3-TTS voices** (Apache-2.0) as a second engine, on NVIDIA GPUs: 1.7B CustomVoice (9 speakers that follow written **style
+  directions**), 1.7B Base (**voice cloning** from a short recording), and 0.6B variants of both (0.6B not yet measured here).
+- **Engine packs:** one click (or `noorvox engines install`) installs a private Python 3.12 with PyTorch + CUDA, faster-qwen3-tts and
+  transformers from a **hash-locked** list (every package pinned to version and sha256). Installing a Qwen model installs the engine first.
+- **Reproducible takes:** Qwen takes record their seed; the same seed reproduces the WAV byte for byte (verified).
+- **Cloned voices with consent:** each voice profile stores the reference copy, its hash, its transcript and the consent statement the user
+  confirmed. Takes and manifests say `voiceKind: clone`.
+- **Kokoro on the GPU (opt-in):** ONNX Runtime CUDA provider pack + Settings → *Run Kokoro on*. ~15× real time vs ~6× on CPU, same voice.
+  Falls back to CPU, and says so, when the packs or CUDA are missing.
+- **Honest controls everywhere:** each model declares `capabilities` (speed, style, cloning, blending, seed, GPU, languages). The CLI rejects
+  other options with `unsupported`, and the studio shows only real controls (no speed slider for Qwen, no style box for Kokoro).
+- **Monitor:** live GPU memory (from `torch.cuda`) and the Python engine's own memory for Qwen workers.
+- Projects: optional `style` on the project, speakers and segments; switch a project's model in the Cast panel or with `projects cast --model`.
+- Measured through NoorVox on an RTX 3080 (shared with other apps), HDD storage: Qwen 1.7B load 81 s, warm real-time factor 0.39;
+  Kokoro CUDA 0.065–0.07 vs CPU 0.17. Details: [ADR-0002](adr/0002-qwen3-tts-and-gpu.md).
+
 ## 0.2.0 — creative tools
 
 - **Voice blending:** your own narrator from 2–4 Kokoro voices (immutable, hashed, usable everywhere).

@@ -34,8 +34,9 @@ public sealed class IpcResponse
 
 public sealed record IpcError(string Code, string Message);
 
-public sealed record LoadParams(string ModelDirectory);
-public sealed record SynthesizeParams(string Text, string VoiceId, double Speed, string OutputPath, bool Wait = true);
+public sealed record LoadParams(string ModelDirectory, Backends.BackendLoadOptions? Options = null);
+public sealed record SynthesizeParams(string Text, string VoiceId, double Speed, string OutputPath, bool Wait = true,
+    string? Style = null, long? Seed = null, string? Language = null);
 public sealed record ShutdownParams(bool Drain = true);
 
 public sealed record LoadedModelInfo(string Id, string Version, string ModelSha256, string Directory, DateTimeOffset LoadedAt, long LoadMs);
@@ -62,6 +63,11 @@ public sealed class WorkerRuntimeStatus
     public long CpuTimeMs { get; set; }
     public DateTimeOffset SampledAt { get; set; }
     public string? LastError { get; set; }
+    /// <summary>GPU memory as the engine reports it; null when the engine can't measure it.</summary>
+    public Backends.GpuMemoryInfo? Gpu { get; set; }
+    /// <summary>A helper process (Qwen's Python engine) with its own memory footprint.</summary>
+    public Backends.SidecarInfo? Sidecar { get; set; }
+    public string? ProviderNote { get; set; }
 }
 
 /// <summary>Raised when the worker cannot be reached at all (no pipe, timeout, broken connection).</summary>
@@ -116,7 +122,9 @@ public static class WorkerClient
     {
         ErrorCodes.InvalidArguments => ExitCode.InvalidArguments,
         ErrorCodes.InvalidInput => ExitCode.InvalidInput,
-        ErrorCodes.ModelNotInstalled or ErrorCodes.VoiceNotFound or ErrorCodes.UnknownModel => ExitCode.ModelMissing,
+        ErrorCodes.ModelNotInstalled or ErrorCodes.VoiceNotFound or ErrorCodes.UnknownModel or ErrorCodes.EngineNotInstalled => ExitCode.ModelMissing,
+        ErrorCodes.Unsupported => ExitCode.InvalidArguments,
+        ErrorCodes.GpuOutOfMemory => ExitCode.SynthesisFailed,
         ErrorCodes.WorkerBusy or ErrorCodes.WorkerAlreadyRunning => ExitCode.WorkerBusy,
         ErrorCodes.SynthesisFailed => ExitCode.SynthesisFailed,
         ErrorCodes.IoError or ErrorCodes.PermissionDenied or ErrorCodes.OutputExists => ExitCode.IoError,

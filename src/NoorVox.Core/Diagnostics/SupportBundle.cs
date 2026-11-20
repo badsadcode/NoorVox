@@ -57,6 +57,9 @@ public static class SupportBundle
                 quickVerify = ModelRegistry.Verify(m.Directory, m.Manifest.Files.Concat(m.VoicePacks.SelectMany(p => p.Files)), full: false),
             })));
             Add("workers.json", Json.Serialize(workers));
+            // Engine packs: id, state and what the engine detected at install (versions, CUDA, GPU name). Voice profiles are not
+            // included: they hold a person's voice recording and transcript.
+            Add("engines.json", Json.Serialize(new Engines.EngineRegistry(s).List(ModelCatalog.LoadEmbedded())));
 
             if (Directory.Exists(s.LogsDir))
                 foreach (var log in Directory.EnumerateFiles(s.LogsDir, "*.log").OrderByDescending(File.GetLastWriteTimeUtc).Take(30))
@@ -67,7 +70,8 @@ public static class SupportBundle
 
                 Included: environment.json (OS, .NET, CPU count, memory), settings.json (storage paths and preferences;
                 recent projects reduced to folder names), storage-audit.json (folders, sizes, free space), models.json
-                (installed models, hashes, quick verification), workers.json (running NoorVox workers), logs/ (last 1 MB
+                (installed models, hashes, quick verification), workers.json (running NoorVox workers), engines.json (engine packs and
+                the GPU they detected), logs/ (last 1 MB
                 of each NoorVox log: studio and workers).
 
                 NOT included: scripts, segment text, audio, takes, exports, project files, model files.

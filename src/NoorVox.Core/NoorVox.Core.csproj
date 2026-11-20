@@ -1,8 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <!-- Backend-agnostic application core: storage, models, audio, IPC protocol, worker supervision.
        Must never reference a concrete inference library. -->
   <ItemGroup>
     <EmbeddedResource Include="Models\catalog.json" LogicalName="NoorVox.Core.catalog.json" />
+    <EmbeddedResource Include="Engines\qwen-tts.lock" LogicalName="NoorVox.Core.Engines.qwen-tts.lock" />
     <InternalsVisibleTo Include="NoorVox.Tests" />
   </ItemGroup>
 </Project>

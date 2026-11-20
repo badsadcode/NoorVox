@@ -27,11 +27,13 @@ public sealed class ProjectsApi(MainWindow window, JobObject job, BridgeHost bri
     readonly ConcurrentDictionary<string, Running> _running = new(StringComparer.OrdinalIgnoreCase);
 
     public sealed record PathArgs(string Path);
-    public sealed record CreateArgs(string Title, string Kind, string? Voice);
+    public sealed record CreateArgs(string Title, string Kind, string? Voice, string? Model);
     public sealed record SegmentArgs(string Path, string SegmentId);
-    public sealed record UpdateSegmentArgs(string Path, string SegmentId, string? Text, string? SpeakerId, string? Notes, string? VoiceId, bool ClearVoice);
+    /// <param name="Style">null = unchanged; "" = inherit from the speaker/project again.</param>
+    public sealed record UpdateSegmentArgs(string Path, string SegmentId, string? Text, string? SpeakerId, string? Notes, string? VoiceId, bool ClearVoice, string? Style = null);
     public sealed record AddSegmentArgs(string Path, string SceneId, string? AfterSegmentId);
-    public sealed record CastArgs(string Path, string? SpeakerId, string VoiceId);
+    /// <param name="Style">null = unchanged; "" = none.</param> <param name="Model">Project-wide model change (only without SpeakerId).</param>
+    public sealed record CastArgs(string Path, string? SpeakerId, string VoiceId, string? Style = null, string? Model = null);
     public sealed record GenerateArgs(string Path, string? SectionId, string? SceneId, List<string>? SegmentIds, string Policy, bool Approve);
     public sealed record StopArgs(string Path, bool Now);
     public sealed record ResumeArgs(string Path, string JobId);
@@ -134,7 +136,9 @@ public sealed class ProjectsApi(MainWindow window, JobObject job, BridgeHost bri
         var safe = new string(a.Title.Trim().Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c).ToArray());
         var dir = Path.Combine(parent, safe);
         for (int i = 2; Directory.Exists(dir) && Directory.EnumerateFileSystemEntries(dir).Any(); i++) dir = Path.Combine(parent, $"{safe} ({i})");
-        var store = ProjectStore.Create(dir, a.Title, a.Kind, string.IsNullOrWhiteSpace(a.Voice) ? null : a.Voice);
+        string? model = null;
+        if (!string.IsNullOrWhiteSpace(a.Model)) model = new ModelRegistry(StorageContext.Load()).Resolve(a.Model).Id; // must be installed
+        var store = ProjectStore.Create(dir, a.Title, a.Kind, string.IsNullOrWhiteSpace(a.Voice) ? null : a.Voice, model);
         Remember(store.Root);
         return new { cancelled = false, path = store.Root };
     }
@@ -235,6 +239,7 @@ public sealed class ProjectsApi(MainWindow window, JobObject job, BridgeHost bri
     {
         var p = OpenAllowed(a.Path);
         if (a.Text is { Length: > 20_000 }) throw new NoorVoxException(ErrorCodes.InvalidInput, ExitCode.InvalidInput, "A segment can hold up to 20,000 characters. Split it.");
+        if (a.Style is { Length: > 500 }) throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "Keep style directions under 500 characters.");
         if (a.SpeakerId is { Length: > 0 } sp && p.Project.Speakers.All(s => s.SpeakerId != sp))
             throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, $"Unknown speaker '{sp}'.");
         p.UpdateSegment(a.SegmentId, s =>
@@ -244,6 +249,7 @@ public sealed class ProjectsApi(MainWindow window, JobObject job, BridgeHost bri
             if (a.Notes is not null) s.Notes = a.Notes.Length == 0 ? null : a.Notes;
             if (a.ClearVoice) s.VoiceId = null;
             else if (a.VoiceId is { Length: > 0 }) s.VoiceId = a.VoiceId;
+            if (a.Style is not null) s.Style = a.Style.Trim().Length == 0 ? null : a.Style.Trim();
         });
         return SegmentView(p, a.SegmentId);
     }
@@ -265,15 +271,31 @@ public sealed class ProjectsApi(MainWindow window, JobObject job, BridgeHost bri
     object Cast(CastArgs a)
     {
         var p = OpenAllowed(a.Path);
-        var model = ModelOrNull(p) ?? throw new NoorVoxException(ErrorCodes.ModelNotInstalled, ExitCode.ModelMissing, "Install a voice model first.");
-        if (!model.Voices.Any(v => v.VoiceId == a.VoiceId))
-            throw new NoorVoxException(ErrorCodes.VoiceNotFound, ExitCode.ModelMissing, $"Voice '{a.VoiceId}' is not installed.");
+        if (a.Model is not null && a.SpeakerId is not null)
+            throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "The model is chosen for the whole project.");
+        var model = a.Model is not null ? new ModelRegistry(StorageContext.Load()).Resolve(a.Model)
+            : ModelOrNull(p) ?? throw new NoorVoxException(ErrorCodes.ModelNotInstalled, ExitCode.ModelMissing, "Install a voice model first.");
+        if (!model.HasVoice(a.VoiceId))
+            throw new NoorVoxException(ErrorCodes.VoiceNotFound, ExitCode.ModelMissing, $"Voice '{a.VoiceId}' is not installed for {model.Manifest.DisplayName}.");
+        var style = a.Style?.Trim();
+        NoorVox.Core.Narration.NarrationService.CheckCapabilities(model, 1.0, style, null, null);
         p.MutateProject(proj =>
         {
-            if (a.SpeakerId is null) { proj.Defaults.VoiceId = a.VoiceId; return; }
+            if (a.SpeakerId is null)
+            {
+                if (a.Model is not null)
+                {
+                    proj.Defaults.Model = model.Id;
+                    if (!model.Capabilities.Speed) proj.Defaults.Speed = 1.0; // e.g. Qwen has no speed control
+                }
+                proj.Defaults.VoiceId = a.VoiceId;
+                if (style is not null) proj.Defaults.Style = style.Length == 0 ? null : style;
+                return;
+            }
             var sp = proj.Speakers.FirstOrDefault(s => s.SpeakerId == a.SpeakerId)
                 ?? throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, $"Unknown speaker '{a.SpeakerId}'.");
             sp.VoiceId = a.VoiceId;
+            if (style is not null) sp.Style = style.Length == 0 ? null : style;
         });
         return new { defaults = p.Project.Defaults, speakers = p.Project.Speakers };
     }

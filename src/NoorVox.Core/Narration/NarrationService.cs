@@ -14,6 +14,12 @@ public sealed record NarrationRequest
     public required string Text { get; init; }
     public string? VoiceId { get; init; }
     public double Speed { get; init; } = 1.0;
+    /// <summary>Delivery directions (Qwen CustomVoice 1.7B). Rejected for models without the capability.</summary>
+    public string? Style { get; init; }
+    /// <summary>Sampling seed for reproducible takes (Qwen). null = a fresh random seed, reported in the result.</summary>
+    public long? Seed { get; init; }
+    /// <summary>Language option for engines that take one (Qwen: auto, english, ...).</summary>
+    public string? Language { get; init; }
     public string? Model { get; init; }
     public required string OutputPath { get; init; }
     public bool Overwrite { get; init; }
@@ -40,7 +46,8 @@ public sealed record NarrationTimings(long SynthesisMs, long TotalMs, double Rea
 public sealed record NarrationResult(
     string OutputPath, long DurationMs, double DurationSeconds, int SampleRate, int Channels, int BitsPerSample, long Samples, long Bytes,
     TextInfo Text, string Voice, double Speed, ModelProvenance Model, BackendProvenance Backend, WorkerUsage Worker,
-    NarrationTimings Timings, DateTimeOffset CreatedAt, string Generator, string? ManifestPath = null);
+    NarrationTimings Timings, DateTimeOffset CreatedAt, string Generator, string? ManifestPath = null,
+    string? Style = null, long? Seed = null, string? Language = null, string VoiceKind = "pack");
 
 /// <summary>
 /// Text → validated WAV at a chosen path, with provenance. Shared by the CLI (<c>noorvox synth</c>) and NoorVox Studio,
@@ -49,7 +56,6 @@ public sealed record NarrationResult(
 public sealed class NarrationService(StorageContext storage, WorkerSupervisor supervisor)
 {
     public const string DefaultWorker = WorkerLease.DefaultWorker;
-    public const double MinSpeed = 0.5, MaxSpeed = 2.0;
 
     public async Task<NarrationResult> SynthesizeAsync(NarrationRequest req, Action<string>? progress, CancellationToken ct)
     {
@@ -60,11 +66,10 @@ public sealed class NarrationService(StorageContext storage, WorkerSupervisor su
         var model = new ModelRegistry(storage).Resolve(req.Model);
         var voiceId = req.VoiceId ?? storage.Settings.DefaultVoice ?? model.Manifest.DefaultVoice ?? model.Voices.FirstOrDefault().VoiceId
             ?? throw new NoorVoxException(ErrorCodes.VoiceNotFound, ExitCode.ModelMissing, $"{model.Reference} has no voices installed.");
-        if (!model.Voices.Any(v => v.VoiceId == voiceId))
+        if (!model.HasVoice(voiceId))
             throw new NoorVoxException(ErrorCodes.VoiceNotFound, ExitCode.ModelMissing, $"Voice '{voiceId}' is not installed for {model.Reference}.",
                 new { voiceId, hint = $"noorvox voices list --model {model.Reference}" });
-        if (req.Speed is < MinSpeed or > MaxSpeed)
-            throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, $"Speed must be between {MinSpeed} and {MaxSpeed} (Kokoro's supported range).");
+        CheckCapabilities(model, req.Speed, req.Style, req.Seed, req.Language);
 
         var outPath = Path.GetFullPath(req.OutputPath);
         if (!outPath.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
@@ -86,7 +91,9 @@ public sealed class NarrationService(StorageContext storage, WorkerSupervisor su
         try
         {
             progress?.Invoke($"Synthesizing {text.Length} chars with {voiceId} on worker '{workerId}'...");
-            result = await supervisor.SynthesizeAsync(workerId, new SynthesizeParams(text, voiceId, req.Speed, tempWav), ct);
+            var style = string.IsNullOrWhiteSpace(req.Style) ? null : req.Style.Trim();
+            result = await supervisor.SynthesizeAsync(workerId, new SynthesizeParams(text, voiceId, req.Speed, tempWav,
+                Style: style, Seed: req.Seed, Language: req.Language), ct);
         }
         catch
         {
@@ -117,7 +124,9 @@ public sealed class NarrationService(StorageContext storage, WorkerSupervisor su
             new BackendProvenance(model.Manifest.Backend ?? "kokoro-onnx", after.ExecutionProvider ?? "CPU"),
             new WorkerUsage(workerId, reused, started, stoppedAfter, after.State),
             new NarrationTimings(result.ElapsedMs, total.ElapsedMilliseconds, Math.Round(result.ElapsedMs / Math.Max(1.0, info.DurationMs), 3)),
-            DateTimeOffset.Now, $"NoorVox {NoorVoxInfo.Version}");
+            DateTimeOffset.Now, $"NoorVox {NoorVoxInfo.Version}",
+            Style: string.IsNullOrWhiteSpace(req.Style) ? null : req.Style.Trim(), Seed: result.Seed, Language: req.Language,
+            VoiceKind: ModelVoices.Describe(model, voiceId, model.Voices.First(v => v.VoiceId == voiceId).PackId).Kind);
 
         if (req.WriteManifest)
         {
@@ -126,6 +135,29 @@ public sealed class NarrationService(StorageContext storage, WorkerSupervisor su
             FileUtil.WriteAllTextAtomic(manifestPath, Json.Serialize(narration));
         }
         return narration;
+    }
+
+    /// <summary>Rejects options the model can't honour (AGENTS.md rule 2: no fake controls), with the reason.</summary>
+    public static void CheckCapabilities(InstalledModel model, double speed, string? style, long? seed, string? language)
+    {
+        var caps = model.Capabilities;
+        string name = model.Manifest.DisplayName;
+        if (caps.Speed ? speed < caps.MinSpeed || speed > caps.MaxSpeed : Math.Abs(speed - 1.0) > 1e-9)
+            throw new NoorVoxException(caps.Speed ? ErrorCodes.InvalidArguments : ErrorCodes.Unsupported, ExitCode.InvalidArguments,
+                caps.Speed ? $"Speed must be between {caps.MinSpeed} and {caps.MaxSpeed} for {name}."
+                    : $"{name} has no speed control. Leave speed at 1.0{(caps.Style ? " and ask for a pace in the style instead" : "")}.");
+        if (!string.IsNullOrWhiteSpace(style) && !caps.Style)
+            throw new NoorVoxException(ErrorCodes.Unsupported, ExitCode.InvalidArguments, $"{name} does not take style directions.");
+        if (style is { Length: > 500 })
+            throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "Keep style directions under 500 characters.");
+        if (seed is not null && !caps.Seed)
+            throw new NoorVoxException(ErrorCodes.Unsupported, ExitCode.InvalidArguments, $"{name} has no seed: its output can't be reproduced exactly.");
+        if (seed is < 0 or > int.MaxValue)
+            throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, $"Seed must be between 0 and {int.MaxValue}.");
+        if (language is not null && !caps.Languages.Contains(language))
+            throw new NoorVoxException(caps.Languages.Count == 0 ? ErrorCodes.Unsupported : ErrorCodes.InvalidArguments, ExitCode.InvalidArguments,
+                caps.Languages.Count == 0 ? $"{name} takes its language from the voice; there is no language option."
+                    : $"Language '{language}' is not supported by {name}. Use one of: {string.Join(", ", caps.Languages)}.");
     }
 
     static void TryDelete(string path)

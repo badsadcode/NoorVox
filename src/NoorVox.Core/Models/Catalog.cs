@@ -1,9 +1,13 @@
+using NoorVox.Core.Engines;
+
 namespace NoorVox.Core.Models;
 
 public sealed record PackageFile(string Path, long Size, string Sha256);
 
 /// <summary>How to obtain files: a single file, or a zip whose entries are filtered to the package's file list.</summary>
-public sealed record CatalogDownload(string Url, long Size, string Sha256, string Kind, string Target);
+/// <param name="Kind"><c>file</c>; <c>zip</c> (entries filtered to the file list); <c>zip-tree</c> (every entry under
+/// <paramref name="Prefix"/>, for archives verified as a whole, such as the Python runtime).</param>
+public sealed record CatalogDownload(string Url, long Size, string Sha256, string Kind, string Target, string? Prefix = null);
 
 /// <summary>Anything installable from the catalog (a model or a voice pack).</summary>
 public interface ICatalogItem
@@ -21,7 +25,12 @@ public interface ICatalogItem
 public sealed record CatalogModel(
     string Id, string Version, string DisplayName, string Description, string Backend, bool Recommended,
     string License, string LicenseUrl, string Source, string DefaultVoice, int SampleRate,
-    List<string> DefaultVoicePacks, List<CatalogDownload> Downloads, List<PackageFile> Files) : ICatalogItem;
+    List<string> DefaultVoicePacks, List<CatalogDownload> Downloads, List<PackageFile> Files,
+    ModelCapabilities? Capabilities = null, List<BuiltInVoice>? BuiltInVoices = null, string? Engine = null,
+    string? Family = null, double? MinVramGb = null) : ICatalogItem;
+
+/// <summary>A speaker that ships inside a model (Qwen CustomVoice), as opposed to a voice-pack file.</summary>
+public sealed record BuiltInVoice(string Id, string DisplayName, string Gender, string Language, string Description);
 
 public sealed record CatalogVoicePack(
     string Id, string Version, string ModelId, List<string> ModelVersions, string DisplayName, string Description,
@@ -31,8 +40,12 @@ public sealed record CatalogVoicePack(
 /// The list of models and voice packs NoorVox knows how to install, with URLs, sizes, sha256 and licenses.
 /// v1 ships embedded in NoorVox.Core (regenerate with tools/gen_catalog.py); a signed remote refresh comes later.
 /// </summary>
-public sealed record ModelCatalog(int CatalogSchemaVersion, string CatalogVersion, List<CatalogModel> Models, List<CatalogVoicePack> VoicePacks)
+public sealed record ModelCatalog(int CatalogSchemaVersion, string CatalogVersion, List<CatalogModel> Models, List<CatalogVoicePack> VoicePacks,
+    List<CatalogEngine>? Engines = null)
 {
+    public CatalogEngine? FindEngine(string id) =>
+        (Engines ?? []).Where(e => e.Id.Equals(id, StringComparison.OrdinalIgnoreCase)).OrderByDescending(e => ModelRef.ParseVersion(e.Version)).FirstOrDefault();
+
     public static ModelCatalog LoadEmbedded()
     {
         using var stream = typeof(ModelCatalog).Assembly.GetManifestResourceStream("NoorVox.Core.catalog.json")

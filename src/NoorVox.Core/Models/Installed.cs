@@ -1,3 +1,4 @@
+using NoorVox.Core.Backends;
 using NoorVox.Core.Storage;
 using NoorVox.Core.Util;
 
@@ -27,25 +28,51 @@ public sealed class PackageManifest
     public DateTimeOffset InstalledAt { get; set; }
     public string? DefaultVoice { get; set; }
     public int? SampleRate { get; set; }
+    /// <summary>null on Kokoro manifests written before 0.3 (see <see cref="ModelCapabilities.For"/>).</summary>
+    public ModelCapabilities? Capabilities { get; set; }
+    public List<BuiltInVoice>? BuiltInVoices { get; set; }
+    /// <summary>Engine pack the model runs on (e.g. <c>qwen-tts</c>); null = built into NoorVox (Kokoro).</summary>
+    public string? Engine { get; set; }
     public List<PackageFile> Files { get; set; } = [];
 }
 
-public sealed record InstalledModel(PackageManifest Manifest, string Directory, IReadOnlyList<PackageManifest> VoicePacks)
+public sealed record InstalledModel(PackageManifest Manifest, string Directory, IReadOnlyList<PackageManifest> VoicePacks,
+    IReadOnlyList<VoiceProfile>? Profiles = null)
 {
+    /// <summary>Pseudo pack ids for voices that don't come from a voice-pack file.</summary>
+    public const string BuiltInPackId = "built-in", ProfilePackId = "voice-profiles";
+
     public string Id => Manifest.Id;
     public string Version => Manifest.Version;
     public string Reference => $"{Id}@{Version}";
-    /// <summary>sha256 of the model weights file (provenance for takes).</summary>
-    public string ModelSha256 => Manifest.Files.First(f => f.Path.EndsWith(".onnx", StringComparison.OrdinalIgnoreCase)).Sha256;
-    public string ModelFile => Path.Combine(Directory, Manifest.Files.First(f => f.Path.EndsWith(".onnx", StringComparison.OrdinalIgnoreCase)).Path);
+    public ModelCapabilities Capabilities => ModelCapabilities.For(Manifest);
+    public string Backend => Manifest.Backend ?? "kokoro-onnx";
 
-    /// <summary>Voice ids provided by installed voice packs (file stem of voices/*.npy).</summary>
-    public IReadOnlyList<(string VoiceId, string PackId, PackageFile File)> Voices =>
+    /// <summary>The main weights file: Kokoro's <c>.onnx</c>, else <c>model.safetensors</c>, else the largest file.</summary>
+    public PackageFile PrimaryFile =>
+        Manifest.Files.FirstOrDefault(f => f.Path.EndsWith(".onnx", StringComparison.OrdinalIgnoreCase))
+        ?? Manifest.Files.FirstOrDefault(f => f.Path == "model.safetensors")
+        ?? Manifest.Files.OrderByDescending(f => f.Size).First();
+
+    /// <summary>sha256 of the model weights file (provenance for takes).</summary>
+    public string ModelSha256 => PrimaryFile.Sha256;
+    public string ModelFile => Path.Combine(Directory, PrimaryFile.Path);
+
+    /// <summary>
+    /// Every voice this model can speak with: voice-pack files (Kokoro <c>voices/*.npy</c>), built-in speakers (Qwen
+    /// CustomVoice) and voice profiles (cloned voices, for models that can clone). <c>File</c> is null unless the
+    /// voice is a voice-pack file.
+    /// </summary>
+    public IReadOnlyList<(string VoiceId, string PackId, PackageFile? File)> Voices =>
         VoicePacks.SelectMany(p => p.Files
                 .Where(f => f.Path.StartsWith("voices/", StringComparison.Ordinal) && f.Path.EndsWith(".npy", StringComparison.Ordinal))
-                .Select(f => (Path.GetFileNameWithoutExtension(f.Path), p.Id, f)))
+                .Select(f => (Path.GetFileNameWithoutExtension(f.Path), p.Id, (PackageFile?)f)))
+            .Concat((Manifest.BuiltInVoices ?? []).Select(v => (v.Id, BuiltInPackId, (PackageFile?)null)))
+            .Concat(Capabilities.Cloning ? (Profiles ?? []).Select(p => (p.VoiceId, ProfilePackId, (PackageFile?)null)) : [])
             .GroupBy(v => v.Item1).Select(g => g.First())
             .OrderBy(v => v.Item1, StringComparer.Ordinal).ToList();
+
+    public bool HasVoice(string voiceId) => Voices.Any(v => v.VoiceId == voiceId);
 }
 
 public sealed record VerifyProblem(string Path, string Problem);
@@ -67,7 +94,7 @@ public sealed class ModelRegistry(StorageContext storage)
             {
                 var manifest = Json.ReadFile<PackageManifest>(manifestPath);
                 var dir = Path.GetDirectoryName(manifestPath)!;
-                result.Add(new InstalledModel(manifest, dir, ReadVoicePacks(dir)));
+                result.Add(new InstalledModel(manifest, dir, ReadVoicePacks(dir), VoiceProfiles.ReadAll(root)));
             }
             catch (Exception ex) when (ex is System.Text.Json.JsonException or InvalidDataException or IOException)
             {
@@ -83,7 +110,9 @@ public sealed class ModelRegistry(StorageContext storage)
         var manifestPath = Path.Combine(modelDir, ModelManifestName);
         if (!File.Exists(manifestPath))
             throw new NoorVoxException(ErrorCodes.ModelNotInstalled, ExitCode.ModelMissing, $"No {ModelManifestName} in {modelDir}.");
-        return new InstalledModel(Json.ReadFile<PackageManifest>(manifestPath), modelDir, ReadVoicePacks(modelDir));
+        // Package layout is <models>/<id>/<version>, so the models root is two levels up (voice profiles live there).
+        var root = Path.GetDirectoryName(Path.GetDirectoryName(Path.GetFullPath(modelDir)))!;
+        return new InstalledModel(Json.ReadFile<PackageManifest>(manifestPath), modelDir, ReadVoicePacks(modelDir), VoiceProfiles.ReadAll(root));
     }
 
     static List<PackageManifest> ReadVoicePacks(string modelDir)

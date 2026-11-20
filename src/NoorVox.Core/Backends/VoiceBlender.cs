@@ -90,7 +90,8 @@ public static partial class VoiceBlender
         int[]? shape = null;
         foreach (var p in normalized)
         {
-            var file = model.Voices.First(v => v.VoiceId == p.VoiceId).File;
+            var file = model.Voices.First(v => v.VoiceId == p.VoiceId).File
+                ?? throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, $"'{p.VoiceId}' is not a Kokoro voice file and can't be blended.");
             var (sh, data) = NpyFile.Read(Path.Combine(model.Directory, file.Path));
             if (shape is null) { shape = sh; mix = new float[data.Length]; }
             else if (!sh.SequenceEqual(shape)) throw Invalid($"Voice '{p.VoiceId}' has a different shape and can't be blended.");

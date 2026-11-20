@@ -5,8 +5,8 @@
 | Class | Default (installed mode) | Default (portable mode) | What's in it |
 |---|---|---|---|
 | Home (settings, worker registry) | `%APPDATA%\NoorVox` | `<app>\data` | `settings.json`, `runtime\workers\*.json` |
-| Models & voices | `%LOCALAPPDATA%\NoorVox\Models` | `<app>\data\Models` | model packages (hundreds of MB) |
-| Download cache | `%LOCALAPPDATA%\NoorVox\Cache` | `<app>\data\Cache` | `staging\` during downloads only |
+| Models & voices | `%LOCALAPPDATA%\NoorVox\Models` | `<app>\data\Models` | model packages (hundreds of MB to 4.5 GB each), `engines\` (Qwen engine ~5.2 GB, ONNX Runtime CUDA ~330 MB), `voice-profiles\` (cloned voices) |
+| Download cache | `%LOCALAPPDATA%\NoorVox\Cache` | `<app>\data\Cache` | `staging\` during downloads; `pip\` (engine package cache, several GB, safe to delete); `hf\`, `torch\`, `numba\` (Qwen engine caches; it runs offline) |
 | Temporary audio | `%LOCALAPPDATA%\NoorVox\Temp` | `<app>\data\Temp` | `synth\`, studio previews (auto-deleted after 3 days), `logs\` |
 | Projects | `Documents\NoorVox\Projects` | `<app>\data\Projects` | default parent for new projects (a project can live anywhere) |
 | Exports | `Documents\NoorVox\Exports` | `<app>\data\Exports` | quick-narration exports, support bundles |
@@ -32,7 +32,9 @@ with default paths, or by another launcher that saw a different AppData. It only
 | Action | Network |
 |---|---|
 | Synthesis, preview, editing, jobs, assembly, export | **none**: models load from disk by path |
-| `models install/update`, `voices install` | HTTPS downloads from the catalog URLs (GitHub releases), on request only |
+| `models install/update`, `voices install` | HTTPS downloads from the catalog URLs (GitHub releases, Hugging Face at pinned revisions), on request only |
+| `engines install` | HTTPS from api.nuget.org (Python, ONNX Runtime), pypi.org / files.pythonhosted.org and download.pytorch.org (pip packages, each hash-checked), on request only |
+| Qwen synthesis | **none**: the engine starts with `HF_HUB_OFFLINE=1` / `TRANSFORMERS_OFFLINE=1` and loads the model folder by path |
 | Update check | none automatic in 0.1.0 (`models update --check` uses the catalog shipped in the app) |
 | Telemetry | **none** |
 
@@ -45,7 +47,11 @@ with default paths, or by another launcher that saw a different AppData. It only
 - **Support bundles** (`noorvox diagnostics bundle` / Settings → Create support bundle…) contain: versions, OS, settings (recent project paths
   reduced to folder names), the storage audit, installed models and hashes, running workers, and the last 1 MB of NoorVox logs. They **never**
   contain scripts, segment text, audio, takes or project files. Logs and paths can still contain folder names from your PC, so review a bundle before sharing it.
-- Logs (`<temp>\logs`) record lifecycle events, timings, character counts and voice ids. They don't record script text.
+- Logs (`<temp>\logs`) record lifecycle events, timings, character counts, voice ids and style directions. They don't record script text.
+  `engine-<id>.log` holds pip's output from engine installs.
+- **Cloned voices** (voice profiles) hold a copy of the reference recording, its transcript, its sha256, the original file name (not the
+  path), and the consent statement you confirmed, with a timestamp. They stay on this PC in `<models>\voice-profiles\`, are never
+  uploaded, and are deleted with `noorvox voices remove-profile`. Only clone voices you own or have permission to use.
 
 ## Removing NoorVox
 

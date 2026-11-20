@@ -34,7 +34,7 @@ public class PerformanceTests(ITestOutputHelper output) : IDisposable
 
     static readonly byte[] Pcm = new byte[24_000]; // 0.5 s of silence-ish audio
 
-    static Task<SynthesisResult> Instant(string text, string voice, double speed, string outputWav, CancellationToken ct)
+    static Task<SynthesisResult> Instant(string text, string voice, double speed, string? style, string outputWav, CancellationToken ct)
     {
         WavWriter.WritePcm16(outputWav, Pcm, 24_000);
         return Task.FromResult(new SynthesisResult(outputWav, 24_000, 1, 16, 12_000, 500, 0));

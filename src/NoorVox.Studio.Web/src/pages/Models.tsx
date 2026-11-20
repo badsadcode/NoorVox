@@ -4,7 +4,21 @@ import { Progress } from "../components/Common";
 import { Check, Download, Folder, Shield, Spinner } from "../components/Icons";
 import { fmtBytes, shortHash } from "../format";
 import { useStudio } from "../studio";
-import type { InstallProgress, ModelsOverview, VoicesResponse } from "../types";
+import type { EngineStatus, InstallProgress, ModelCapabilities, ModelsOverview, VoicesResponse } from "../types";
+
+/** What a model can do, as words (never a control the model doesn't have). */
+function CapabilityPills({ c }: { c: ModelCapabilities }) {
+  return (
+    <>
+      {c.requiresGpu && <span className="pill warn" title="Needs an NVIDIA GPU with CUDA">NVIDIA GPU</span>}
+      {c.speed && <span className="pill">speed</span>}
+      {c.style && <span className="pill">style directions</span>}
+      {c.cloning && <span className="pill">voice cloning</span>}
+      {c.blending && <span className="pill">voice blending</span>}
+      {c.seed && <span className="pill" title="Takes record a seed and can be reproduced on this PC">reproducible</span>}
+    </>
+  );
+}
 
 export function useInstall(onDone: () => void) {
   const { notify, refreshInfo } = useStudio();
@@ -34,6 +48,15 @@ export function useInstall(onDone: () => void) {
 export function InstallStatus({ progress }: { progress: InstallProgress | null }) {
   if (!progress) return <Progress label="Working" />;
   const pct = progress.total ? Math.round(((progress.done ?? 0) / progress.total) * 100) : null;
+  if (progress.file?.includes(" ")) // an engine install passing pip's own lines through; done/total count packages
+    return (
+      <div className="stack" style={{ gap: 6 }}>
+        <Progress value={progress.done} total={progress.total} label="Installing engine packages" />
+        <span className="muted small" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={progress.file}>
+          Engine packages {progress.done}/{progress.total} · {progress.file}
+        </span>
+      </div>
+    );
   const label = progress.stage === "downloading" ? "Downloading" : progress.stage === "verifying" ? "Verifying" : progress.stage === "unpacking" ? "Unpacking" : progress.stage;
   return (
     <div className="stack" style={{ gap: 6 }}>
@@ -62,6 +85,8 @@ export function Models() {
   const openUrl = (url: string) => call("shell.openUrl", { url }).catch((e) => notify(errorText(e), true));
   const notInstalled = data?.catalog.filter((c) => !c.installed) ?? [];
   const [blending, setBlending] = useState(false);
+  const [engines, setEngines] = useState<EngineStatus[]>([]);
+  useEffect(() => { call<{ engines: EngineStatus[] }>("engines.list").then((r) => setEngines(r.engines), () => setEngines([])); }, [data]);
 
   return (
     <>
@@ -87,6 +112,7 @@ export function Models() {
                   <h3>{m.displayName}</h3>
                   <div className="row small muted" style={{ marginTop: 4 }}>
                     <span className="pill ok"><Check size={13} /> Installed</span>
+                    <CapabilityPills c={m.capabilities} />
                     <span>{m.voices} voices</span><span>·</span><span>{fmtBytes(m.sizeBytes)} on disk</span><span>·</span>
                     <a href="#" onClick={(e) => { e.preventDefault(); openUrl(m.licenseUrl); }}>{m.license}</a>
                   </div>
@@ -104,7 +130,10 @@ export function Models() {
                 <dt>Model sha256</dt><dd className="mono" title={m.modelSha256}>{shortHash(m.modelSha256)}</dd>
                 <dt>Source</dt><dd><a href="#" onClick={(e) => { e.preventDefault(); openUrl(m.source); }}>{m.source.replace("https://", "")}</a> · {m.origin === "import" ? "imported" : "downloaded"} {new Date(m.installedAt).toLocaleDateString()}</dd>
               </dl>
-              <div>
+              {m.capabilities.cloning && (
+                <p className="muted small" style={{ margin: 0 }}>Its voices are your cloned voice profiles. Create them in Quick Narration with “Clone a voice…”.</p>
+              )}
+              {(m.voicePacks.length > 0 || m.backend === "kokoro-onnx") && <div>
                 <label className="field">Voice packs</label>
                 <div className="stack" style={{ gap: 8 }}>
                   {m.voicePacks.map((p) => (
@@ -121,8 +150,8 @@ export function Models() {
                   ))}
                   {m.voicePacks.length === 0 && <span className="muted small">No additional voice packs are available for this model yet.</span>}
                 </div>
-              </div>
-              <div>
+              </div>}
+              {m.capabilities.blending && <div>
                 <div className="row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
                   <label className="field" style={{ margin: 0 }}>My blended voices</label>
                   <button className="btn small" onClick={() => setBlending(true)}>＋ Blend voices…</button>
@@ -137,7 +166,7 @@ export function Models() {
                     </div>
                   ))}
                 </div>
-              </div>
+              </div>}
             </section>
           );
         })}
@@ -150,7 +179,13 @@ export function Models() {
               <div>
                 <h3>{c.displayName} {c.recommended && <span className="pill accent">Recommended</span>}</h3>
                 <p className="muted" style={{ margin: "6px 0 0" }}>{c.description}</p>
-                <div className="muted small" style={{ marginTop: 6 }}>{fmtBytes(c.downloadBytes)} download · <a href="#" onClick={(e) => { e.preventDefault(); openUrl(c.licenseUrl); }}>{c.license}</a></div>
+                <div className="row small muted" style={{ marginTop: 6 }}><CapabilityPills c={c.capabilities} /></div>
+                <div className="muted small" style={{ marginTop: 6 }}>
+                  {fmtBytes(c.downloadBytes)} download
+                  {!c.engineInstalled && <> + engine pack {fmtBytes(c.engineBytes)} (installed once, shared by all Qwen models)</>}
+                  {c.capabilities.requiresGpu && <> · {c.minVramGb ? `needs about ${c.minVramGb} GB of free GPU memory (measured peak, rounded up)` : "GPU memory use not measured yet"}</>}
+                  {" · "}<a href="#" onClick={(e) => { e.preventDefault(); openUrl(c.licenseUrl); }}>{c.license}</a>
+                </div>
               </div>
               <button className="btn primary" disabled={!!active} onClick={() => run("models.install", `${c.id}@${c.version}`, `${c.displayName} installed.`)}>
                 {active === `${c.id}@${c.version}` ? <Spinner size={16} /> : <Download size={16} />} Install
@@ -159,6 +194,38 @@ export function Models() {
             {active === `${c.id}@${c.version}` && <InstallStatus progress={progress} />}
           </section>
         ))}
+
+        {engines.length > 0 && <>
+          <h2 style={{ fontSize: 16, margin: "8px 0 0" }}>Engine packs</h2>
+          <p className="muted small" style={{ margin: 0 }}>Runtimes some models need. Installing a Qwen model installs its engine automatically.</p>
+          {engines.map((e) => (
+            <section key={e.id} className="panel model-card">
+              <div className="model-title">
+                <div style={{ minWidth: 0 }}>
+                  <h3>{e.displayName} {e.state === "installed" && <span className="pill ok"><Check size={13} /> Installed</span>}
+                    {e.state === "incomplete" && <span className="pill warn">Interrupted, resume to finish</span>}</h3>
+                  <p className="muted" style={{ margin: "6px 0 0" }}>{e.description}</p>
+                  <div className="muted small" style={{ marginTop: 6 }}>
+                    {e.approxInstallBytes > 0 && <>about {fmtBytes(e.approxInstallBytes)} · </>}used by {e.usedBy.join(", ")}
+                    {e.requires.length > 0 && <> · needs {e.requires.join(", ")}</>}
+                  </div>
+                  {e.state === "installed" && e.verified && (
+                    <div className="muted small" style={{ marginTop: 4 }}>
+                      Checked at install: PyTorch {String(e.verified.torch)} · {e.verified.cuda ? `CUDA ${String(e.verified.cudaVersion)} on ${String(e.verified.device)}` : "no CUDA GPU detected"}
+                    </div>
+                  )}
+                  <div className="mono muted small" style={{ marginTop: 4 }}>{e.path}</div>
+                </div>
+                {e.state !== "installed" && (
+                  <button className="btn primary" disabled={!!active} onClick={() => run("engines.install", e.id, `${e.displayName} installed.`)}>
+                    {active === e.id ? <Spinner size={16} /> : <Download size={16} />} {e.state === "incomplete" ? "Resume" : "Install"}
+                  </button>
+                )}
+              </div>
+              {active === e.id && <InstallStatus progress={progress} />}
+            </section>
+          ))}
+        </>}
 
         {data && <p className="muted small">Catalog {data.catalogVersion}. NoorVox never re-downloads installed files, and new versions install alongside old ones so earlier takes stay reproducible.</p>}
       </div>

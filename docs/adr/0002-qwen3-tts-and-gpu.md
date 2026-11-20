@@ -1,6 +1,6 @@
 # ADR-0002 — Qwen3-TTS as a second backend, and Kokoro on the GPU
 
-**Status:** Proposed (spike done, integration not started) · **Date:** 2026-11-20 · **Author:** Sage · **Reviewer:** Tom
+**Status:** Accepted and implemented in 0.3.0 · **Date:** 2026-11-20 · **Author:** Sage · **Reviewer:** Tom
 
 ## Context
 
@@ -48,7 +48,8 @@ Kokoro runs on the CPU. ADR-0001 left GPU as "later" (DirectML fails; CUDA needs
 4. **Truthful capabilities:**
    - Qwen gets **style instructions** (CustomVoice 1.7B, VoiceDesign) and **voice profiles**, but **no speed slider** (ask for "slower" in the instruction).
    - Kokoro keeps speed and has no instructions.
-   - Sampling is stochastic: takes record the seed, and the seed joins the cacheKey.
+   - Sampling is stochastic: takes record the seed (verified: same seed → byte-identical WAV). The seed is **not** part of the cacheKey,
+     so asking for a new take of unchanged settings still gives a new take; the style is (only when present).
    - GPU VRAM is reported from `torch.cuda` (a credible source), not "unavailable".
 5. **Voice profiles (Qwen):**
    - *built-in* (9 speakers);
@@ -63,6 +64,16 @@ Kokoro runs on the CPU. ADR-0001 left GPU as "later" (DirectML fails; CUDA needs
 7. **Kokoro GPU:** ship ONNX Runtime GPU (it falls back to CPU) and enable CUDA when CUDA 12/cuDNN 9 DLLs are available, either from the installed
    Qwen engine pack or a small "CUDA libraries" pack. It's an opt-in setting with the provider shown truthfully in the Monitor.
 8. GPU sharing: a Qwen worker holds about 5 GB of VRAM. The Monitor shows it, and *Unload* frees it. Running both engines at once is allowed when VRAM permits.
+
+## Implementation notes (0.3.0)
+
+- `sox` has no wheel, so the lock leaves it out (`--only-binary=:all:`). qwen-tts imports it only for the 25 Hz tokenizer; the sidecar
+  installs a stub module that raises if anything actually calls it.
+- Engines install **in place** with the manifest written last. A final rename of the 5 GB tree failed with "access denied" while
+  something (antivirus scanning, a directory walk) had the folder open, so there is no rename step.
+- Measured through NoorVox itself: Qwen 1.7B CustomVoice load 81 s from HDD, warm synthesis RTF 0.394, two runs with seed 2026 produced
+  identical files; worker status reported 4.9 GB reserved VRAM and a 2.2 GB sidecar working set. Kokoro on CUDA: warm RTF 0.065–0.070.
+- Voice profiles live in `<models>\voice-profiles\` (shared by all cloning models and versions), not inside one model folder.
 
 ## Consequences / open points
 

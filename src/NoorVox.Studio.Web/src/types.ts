@@ -7,7 +7,7 @@ export interface AppInfo {
   processorCount: number;
   firstRun: boolean;
   hasModel: boolean;
-  settings: { theme: ThemeId; stopOnExit: boolean; idleTimeoutSeconds: number; defaultVoice: string | null };
+  settings: { theme: ThemeId; stopOnExit: boolean; idleTimeoutSeconds: number; defaultVoice: string | null; kokoroProvider: "cpu" | "cuda" };
   home: { path: string; mode: string; settingsFile: string };
   workerExecutable: { path: string; exists: boolean };
 }
@@ -21,6 +21,14 @@ export interface StoragePath {
   freeBytes: number | null;
 }
 
+/** Mirrors Core/Models/Capabilities.cs: the UI shows only controls that are true here. */
+export interface ModelCapabilities {
+  speed: boolean; minSpeed: number; maxSpeed: number; style: boolean; cloning: boolean; blending: boolean; seed: boolean;
+  requiresGpu: boolean; languages: string[];
+}
+
+export type VoiceKind = "pack" | "blend" | "built-in" | "clone";
+
 export interface Voice {
   id: string;
   language: string;
@@ -28,15 +36,36 @@ export interface Voice {
   gender: "female" | "male" | "unknown";
   displayName: string;
   packId: string;
+  kind: VoiceKind;
+  description?: string | null;
+}
+
+export interface ModelChoice {
+  reference: string; id: string; displayName: string; capabilities: ModelCapabilities; isDefault: boolean; engineReady: boolean;
 }
 
 export interface VoicesResponse {
   model: string | null;
   modelName?: string;
   defaultVoice: string | null;
-  capabilities?: { speed: boolean; minSpeed: number; maxSpeed: number; pitch: boolean; style: boolean; emotion: boolean };
+  capabilities?: ModelCapabilities;
+  engineReady?: boolean;
   voices: Voice[];
+  models?: ModelChoice[];
+  consentStatements?: Record<string, string>;
 }
+
+export interface EngineStatus {
+  id: string; version: string; displayName: string; description: string; kind: string;
+  state: "installed" | "notInstalled" | "incomplete" | "updateAvailable"; path: string; approxInstallBytes: number;
+  license: string; source: string; requires: string[]; usedBy: string[]; verified: Record<string, unknown> | null;
+}
+
+export interface GpuMemory {
+  device: string; allocatedBytes: number; reservedBytes: number; peakAllocatedBytes: number; deviceFreeBytes: number; deviceTotalBytes: number;
+  source: string; sampledAt: string;
+}
+export interface SidecarInfo { pid: number; description: string; workingSetBytes: number; privateBytes: number; sampledAt: string }
 
 export interface LoadedModel { id: string; version: string; modelSha256: string; directory: string; loadedAt: string; loadMs: number }
 export interface CurrentJob { requestId: string; kind: string; startedAt: string; textChars: number; voiceId: string | null }
@@ -60,7 +89,10 @@ export interface WorkerStatus {
   loadedModel?: LoadedModel;
   currentJob?: CurrentJob;
   jobsCompleted?: number;
-  resources?: { workingSetBytes: number; privateBytes: number; cpuTimeMs: number; sampledAt: string; source: string; gpu: string };
+  resources?: {
+    workingSetBytes: number; privateBytes: number; cpuTimeMs: number; sampledAt: string; source: string; gpu: string;
+    gpuMemory?: GpuMemory | null; sidecar?: SidecarInfo | null;
+  };
   idleTimeoutSeconds?: number;
   logPath?: string;
   error?: string;
@@ -87,6 +119,10 @@ export interface NarrationResult {
   createdAt: string;
   generator: string;
   manifestPath?: string;
+  style?: string | null;
+  seed?: number | null;
+  language?: string | null;
+  voiceKind?: VoiceKind;
 }
 
 export interface GenerateResponse { result: NarrationResult; mediaUrl: string }
@@ -99,11 +135,13 @@ export interface InstalledModelInfo {
   id: string; version: string; reference: string; displayName: string; license: string; licenseUrl: string; source: string;
   origin: string; installedAt: string; path: string; modelSha256: string; sizeBytes: number; voices: number; voicePacks: VoicePackInfo[];
   customVoices: { voiceId: string; name: string; parts: { voiceId: string; weight: number }[]; createdAt: string }[];
+  capabilities: ModelCapabilities; engine: string | null; backend: string;
 }
 
 export interface CatalogModelInfo {
   id: string; version: string; displayName: string; description: string; recommended: boolean; license: string; licenseUrl: string;
   downloadBytes: number; installed: boolean; updateAvailable: boolean;
+  capabilities: ModelCapabilities; engine: string | null; minVramGb: number | null; family: string; engineInstalled: boolean; engineBytes: number;
 }
 
 export interface ModelsOverview {
@@ -134,14 +172,15 @@ export interface SegmentView {
   segmentId: string; text: string; speakerId: string | null; voiceOverride: string | null; speedOverride: number | null;
   effectiveVoice: string; effectiveSpeed: number; spokenText: string; status: SegmentStatusId; takes: number;
   approvedTakeId: string | null; latestTakeId: string | null; durationMs: number | null; notes: string | null;
+  styleOverride?: string | null; effectiveStyle?: string | null;
 }
 export interface SceneView { sceneId: string; title: string; segments: SegmentView[] }
 export interface SectionView { sectionId: string; title: string; scenes: SceneView[]; counts: Partial<Record<SegmentStatusId, number>> }
-export interface Speaker { speakerId: string; name: string; voiceId: string | null; speed: number | null }
+export interface Speaker { speakerId: string; name: string; voiceId: string | null; speed: number | null; style?: string | null }
 
 export interface ProjectFile {
   projectId: string; title: string; kind: string; createdAt: string; modifiedAt: string;
-  defaults: { model: string | null; voiceId: string | null; speed: number };
+  defaults: { model: string | null; voiceId: string | null; speed: number; style?: string | null };
   speakers: Speaker[];
 }
 

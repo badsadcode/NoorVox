@@ -16,7 +16,7 @@ namespace NoorVox.Worker;
 /// synthesis itself is serialised. Exits on shutdown request or after the idle timeout, deleting its ownership record.
 /// </summary>
 public sealed class WorkerHost(string workerId, string pipeName, string token, string recordPath, int idleTimeoutSeconds,
-    Func<ITtsBackend> backendFactory, WorkerLog log)
+    Func<InstalledModel, ITtsBackend> backendFactory, WorkerLog log)
 {
     const int MaxRequestChars = 4 * 1024 * 1024;
     readonly object _gate = new();
@@ -34,8 +34,8 @@ public sealed class WorkerHost(string workerId, string pipeName, string token, s
 
     public async Task RunAsync()
     {
-        _backend = backendFactory();
-        log.Write($"started worker={workerId} pid={Environment.ProcessId} backend={_backend.BackendId} ({_backend.BackendVersion}) idleTimeout={idleTimeoutSeconds}s");
+        // The backend is chosen when a model is loaded (Kokoro in-process, Qwen via its engine sidecar).
+        log.Write($"started worker={workerId} pid={Environment.ProcessId} idleTimeout={idleTimeoutSeconds}s");
         var idleTask = IdleWatchAsync();
         var connections = new List<Task>();
         try
@@ -176,6 +176,9 @@ public sealed class WorkerHost(string workerId, string pipeName, string token, s
     WorkerRuntimeStatus Snapshot()
     {
         using var proc = Process.GetCurrentProcess();
+        var resources = _backend as IBackendResources;
+        var gpu = resources?.Gpu;
+        var sidecar = resources?.Sidecar;
         lock (_gate)
         {
             return new WorkerRuntimeStatus
@@ -197,6 +200,9 @@ public sealed class WorkerHost(string workerId, string pipeName, string token, s
                 CpuTimeMs = (long)proc.TotalProcessorTime.TotalMilliseconds,
                 SampledAt = DateTimeOffset.UtcNow,
                 LastError = _lastError,
+                Gpu = gpu,
+                Sidecar = sidecar,
+                ProviderNote = resources?.ProviderNote,
             };
         }
     }
@@ -219,8 +225,11 @@ public sealed class WorkerHost(string workerId, string pipeName, string token, s
         var sw = Stopwatch.StartNew();
         try
         {
-            log.Write($"loading {model.Reference} from {model.Directory}");
-            await _backend!.LoadAsync(model, _shutdown.Token);
+            log.Write($"loading {model.Reference} from {model.Directory} (backend {model.Backend}, provider {p.Options?.ExecutionProvider ?? "cpu"})");
+            var backend = backendFactory(model);
+            lock (_gate) _backend = backend;
+            await backend.LoadAsync(model, p.Options ?? new BackendLoadOptions(), _shutdown.Token);
+            log.Write($"backend {backend.BackendId} ({backend.BackendVersion}) on {backend.ExecutionProvider}");
             var info = new LoadedModelInfo(model.Id, model.Version, model.ModelSha256, model.Directory, DateTimeOffset.UtcNow, sw.ElapsedMilliseconds);
             lock (_gate) { _loaded = info; _state = "ready"; _lastActivity = DateTimeOffset.UtcNow; _lastError = null; }
             log.Write($"loaded in {sw.ElapsedMilliseconds} ms");
@@ -228,8 +237,12 @@ public sealed class WorkerHost(string workerId, string pipeName, string token, s
         }
         catch (Exception ex)
         {
-            lock (_gate) { _state = "idle"; _lastError = $"Model load failed: {ex.Message}"; }
+            ITtsBackend? failed;
+            lock (_gate) { _state = "idle"; _lastError = $"Model load failed: {ex.Message}"; failed = _backend; _backend = null; }
+            failed?.Dispose(); // e.g. stop a half-started Qwen engine
             log.Write($"load failed: {ex}");
+            if (ex is NoorVoxException nve && nve.Code is ErrorCodes.EngineNotInstalled or ErrorCodes.EngineBroken or ErrorCodes.GpuRequired or ErrorCodes.GpuOutOfMemory)
+                throw new NoorVoxException(nve.Code, nve.ExitCode, $"Could not load {model.Reference}: {nve.Message}");
             throw new NoorVoxException(ErrorCodes.ModelLoadFailed, ExitCode.WorkerError, $"Could not load {model.Reference}: {ex.Message}");
         }
     }
@@ -257,8 +270,9 @@ public sealed class WorkerHost(string workerId, string pipeName, string token, s
                 _job = new CurrentJobInfo(requestId, "synthesize", DateTimeOffset.UtcNow, p.Text.Length, p.VoiceId);
                 _lastActivity = DateTimeOffset.UtcNow;
             }
-            log.Write($"synthesize req={requestId} chars={p.Text.Length} voice={p.VoiceId} speed={p.Speed}");
-            var result = await _backend!.SynthesizeAsync(new SynthesisRequest(p.Text, p.VoiceId, p.Speed), p.OutputPath, _shutdown.Token);
+            log.Write($"synthesize req={requestId} chars={p.Text.Length} voice={p.VoiceId} speed={p.Speed}"
+                + (p.Style is null ? "" : $" style=\"{p.Style}\"") + (p.Seed is null ? "" : $" seed={p.Seed}") + (p.Language is null ? "" : $" language={p.Language}"));
+            var result = await _backend!.SynthesizeAsync(new SynthesisRequest(p.Text, p.VoiceId, p.Speed, p.Style, p.Seed, p.Language), p.OutputPath, _shutdown.Token);
             lock (_gate) _jobsCompleted++;
             log.Write($"done req={requestId} audio={result.DurationMs} ms in {result.ElapsedMs} ms");
             return result;

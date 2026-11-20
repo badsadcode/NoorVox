@@ -39,6 +39,9 @@ $voices = (noorvox voices list --language en-us --json | ConvertFrom-Json).data.
 $voices | Select-Object id, gender, displayName
 ```
 
+Each model declares what it supports in `capabilities` (`noorvox models list --json`). Send only those options: anything else fails
+with exit 2 and code `unsupported`.
+
 Kokoro supports **voice** and **speed** (0.5–2.0) only. There is no pitch, emotion or style control, so don't invent one.
 Language follows the voice: `af_*`/`am_*` American English, `bf_*`/`bm_*` British English, `j*` Japanese, `z*` Mandarin,
 `e*` Spanish, `f*` French, `h*` Hindi, `i*` Italian, `p*` Brazilian Portuguese.
@@ -180,6 +183,44 @@ Verify before handing off (the example does all of this):
 
 Don't re-time anything from text length, and don't invent word timings: the manifest is segment-accurate by design.
 For game dialogue, use `export clips` (one file per line id) instead of assembly.
+
+## 9. Qwen3-TTS: directed delivery, reproducible takes, cloned voices (NVIDIA GPU)
+
+Qwen voices follow written directions instead of a speed slider, and a seed makes a take reproducible. They need an NVIDIA GPU.
+
+```powershell
+# One-time: engine (~5.2 GB, hash-locked) + model (~4.5 GB). Resumable; safe to re-run.
+noorvox models install qwen3-tts-1.7b-customvoice --json --quiet | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "install failed: $LASTEXITCODE" }
+
+# Load once (tens of seconds to minutes from an HDD), then reuse the worker for every line.
+noorvox workers start --worker qwen --model qwen3-tts-1.7b-customvoice --json --quiet | Out-Null
+
+$r = noorvox synth --worker qwen --model qwen3-tts-1.7b-customvoice --voice aiden --language english `
+       --style "Calm, warm documentary narration with a hint of humour. Speak slowly." `
+       --text "It started, as so many terrible ideas do, with a single image." `
+       --out "E:\AI\NoorVox\Exports\demo\qwen01.wav" --manifest --json --quiet | ConvertFrom-Json
+$r.data.seed    # keep it: the same seed + text + settings reproduce this exact WAV on this PC
+
+# Same line again, identical audio:
+noorvox synth --worker qwen --model qwen3-tts-1.7b-customvoice --voice aiden --language english `
+  --style "Calm, warm documentary narration with a hint of humour. Speak slowly." --seed $r.data.seed `
+  --text "It started, as so many terrible ideas do, with a single image." --out "E:\AI\NoorVox\Exports\demo\qwen01b.wav" --json --quiet
+
+noorvox workers stop --worker qwen --json --quiet   # frees ~5 GB of GPU memory
+```
+
+Rules for agents:
+- Don't pass `--speed` to Qwen (code `unsupported`); put the pace in `--style`. `--style` only works on `qwen3-tts-1.7b-customvoice`.
+- Speakers: `aiden`, `ryan` (English); `vivian`, `serena`, `uncle_fu`, `dylan`, `eric` (Chinese); `ono_anna` (Japanese); `sohee` (Korean).
+  Every speaker can speak every supported language; pass `--language`.
+- **Cloned voices need a human's consent.** `noorvox voices clone … --consent own-voice|speaker-permission` records a statement the
+  *user* makes. An agent must never choose a consent value on the user's behalf or clone a voice from audio it found; ask the user.
+- Projects: `noorvox projects cast --project DIR --model qwen3-tts-1.7b-customvoice --voice aiden --style "…"` switches a project to Qwen;
+  speakers get their own `--style`. Takes record `style` and `seed`.
+- `gpu_out_of_memory` (exit 8): other apps hold the GPU. Ask the user to close them, or use a 0.6B model. Don't retry in a loop.
+
+Kokoro on the GPU is a user setting (`noorvox gpu set --kokoro cuda`), not something to toggle per call.
 
 ## Reference
 

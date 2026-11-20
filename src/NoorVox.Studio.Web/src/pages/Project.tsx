@@ -47,7 +47,10 @@ export function Project() {
     reloadTimer.current = window.setTimeout(load, 300);
   }, [load]);
 
-  useEffect(() => { load(); call<VoicesResponse>("voices.list").then(setVoices, () => undefined); }, [load]);
+  useEffect(() => { load(); }, [load]);
+  // Voices and controls come from the project's own model (Kokoro or Qwen).
+  const projectModel = ov?.model ?? null;
+  useEffect(() => { call<VoicesResponse>("voices.list", { model: projectModel }).then(setVoices, () => undefined); }, [projectModel]);
 
   useEffect(() => {
     const offs = [
@@ -346,12 +349,18 @@ function SegmentCard({ seg, ov, voices, busy, isLast, playing, onPlay, onChanged
             {ov.project.speakers.map((s) => <option key={s.speakerId} value={s.speakerId}>{s.name}</option>)}
           </select>
         )}
-        <span className="muted small">{voiceName} · {seg.effectiveSpeed.toFixed(2)}×</span>
+        <span className="muted small">{voiceName}{voices?.capabilities?.speed !== false && ` · ${seg.effectiveSpeed.toFixed(2)}×`}</span>
+        {seg.effectiveStyle && <span className="muted small" title={`Style: ${seg.effectiveStyle}`}>· “{seg.effectiveStyle.length > 32 ? seg.effectiveStyle.slice(0, 32) + "…" : seg.effectiveStyle}”</span>}
         <span className={`pill ${st.cls}`} title={st.hint} style={{ marginLeft: "auto" }}>{st.icon} {st.label}</span>
       </div>
       <textarea ref={area} value={text} onChange={(e) => scheduleSave(e.target.value)} onBlur={flush} onKeyDown={onKeys}
         onSelect={(e) => setCursor(e.currentTarget.selectionStart)} rows={Math.min(8, Math.max(2, Math.ceil(text.length / 95)))}
         aria-label={`Text of ${seg.segmentId}`} placeholder="Type what should be spoken…" />
+      {voices?.capabilities?.style && (
+        <input key={seg.styleOverride ?? ""} className="seg-style" defaultValue={seg.styleOverride ?? ""} maxLength={500} aria-label={`Style for ${seg.segmentId}`}
+          placeholder={seg.effectiveStyle && !seg.styleOverride ? `Style: inherits “${seg.effectiveStyle}”` : "Style for this line (optional), e.g. whispering, angry"}
+          onBlur={(e) => { if (e.target.value.trim() !== (seg.styleOverride ?? "")) save({ style: e.target.value.trim() }); }} />
+      )}
       {seg.notes && <div className="seg-notes">📝 {seg.notes}</div>}
       {seg.spokenText && seg.spokenText !== seg.text && <div className="seg-notes">🔊 Spoken as: {seg.spokenText}</div>}
       <div className="segment-actions">
@@ -450,10 +459,24 @@ function GeneratePanel({ ov, sectionTitle, sceneTitle, running, status, onGenera
 
 function CastPanel({ ov, voices, onChanged }: { ov: ProjectOverview; voices: VoicesResponse | null; onChanged: () => void }) {
   const { notify } = useStudio();
-  const cast = async (speakerId: string | null, voiceId: string) => {
-    try { await call("projects.cast", { path: ov.root, speakerId, voiceId }); onChanged(); notify("Voice changed. Affected segments now show as changed until regenerated."); }
-    catch (e) { notify(errorText(e), true); }
+  const cast = async (speakerId: string | null, voiceId: string, extra: { style?: string; model?: string } = {}) => {
+    try {
+      await call("projects.cast", { path: ov.root, speakerId, voiceId, ...extra });
+      onChanged();
+      notify(extra.model ? "Model changed. Every segment now shows as changed until regenerated." : extra.style != null ? "Style saved. Affected segments show as changed until regenerated."
+        : "Voice changed. Affected segments now show as changed until regenerated.");
+    } catch (e) { notify(errorText(e), true); }
   };
+  const caps = voices?.capabilities;
+  const switchModel = async (reference: string) => {
+    const v = await call<VoicesResponse>("voices.list", { model: reference }).catch((e) => { notify(errorText(e), true); return null; });
+    if (!v?.defaultVoice) { if (v) notify("That model has no voices yet (clone one in Quick Narration first).", true); return; }
+    cast(null, v.defaultVoice, { model: reference });
+  };
+  const StyleInput = ({ value, onSave, label }: { value: string | null | undefined; onSave: (s: string) => void; label: string }) => (
+    <input key={value ?? ""} defaultValue={value ?? ""} maxLength={500} aria-label={label} placeholder="Style directions (optional)"
+      style={{ marginTop: 6 }} onBlur={(e) => { if (e.target.value.trim() !== (value ?? "")) onSave(e.target.value.trim()); }} />
+  );
   const VoiceSelect = ({ value, onPick, label }: { value: string; onPick: (v: string) => void; label: string }) => (
     <select value={value} aria-label={label} onChange={(e) => onPick(e.target.value)}>
       {!value && <option value="">(project default)</option>}
@@ -463,12 +486,21 @@ function CastPanel({ ov, voices, onChanged }: { ov: ProjectOverview; voices: Voi
   return (
     <section className="panel">
       <h2>{ov.kind.usesSpeakers ? "Cast" : "Voice"}</h2>
+      {(voices?.models?.length ?? 0) > 1 && <>
+        <label className="field">Model</label>
+        <select value={voices?.model ?? ""} aria-label="Project model" onChange={(e) => switchModel(e.target.value)}>
+          {voices!.models!.map((m) => <option key={m.reference} value={m.reference}>{m.displayName}{m.capabilities.requiresGpu ? " (GPU)" : ""}</option>)}
+        </select>
+      </>}
       <label className="field">Default voice</label>
       <VoiceSelect label="Default voice" value={ov.project.defaults.voiceId ?? voices?.defaultVoice ?? ""} onPick={(v) => cast(null, v)} />
+      {caps?.style && <StyleInput label="Default style" value={ov.project.defaults.style}
+        onSave={(st) => cast(null, ov.project.defaults.voiceId ?? voices?.defaultVoice ?? "", { style: st })} />}
       {ov.project.speakers.filter((s) => ov.kind.usesSpeakers || s.speakerId !== "narrator" || s.voiceId).map((s) => (
         <div key={s.speakerId} style={{ marginTop: 10 }}>
           <label className="field">{s.name}</label>
           <VoiceSelect label={`Voice for ${s.name}`} value={s.voiceId ?? ""} onPick={(v) => cast(s.speakerId, v)} />
+          {caps?.style && s.voiceId && <StyleInput label={`Style for ${s.name}`} value={s.style} onSave={(st) => cast(s.speakerId, s.voiceId!, { style: st })} />}
         </div>
       ))}
       <p className="muted small" style={{ marginBottom: 0 }}>Changing a voice never touches approved takes: affected segments are marked as changed until you regenerate and approve.</p>
@@ -569,7 +601,9 @@ function PronunciationPanel({ ov, onChanged, onPlay }: { ov: ProjectOverview; on
     setTesting(true);
     try {
       const voice = ov.project.defaults.voiceId ?? ov.project.speakers.find((s) => s.voiceId)?.voiceId ?? "af_heart";
-      const r = await call<GenerateResponse>("narration.generate", { text: spoken, voice, speed: ov.project.defaults.speed ?? 1 });
+      const r = await call<GenerateResponse>("narration.generate", {
+        text: spoken, voice, model: ov.model, speed: ov.project.defaults.speed ?? 1, style: ov.project.defaults.style ?? null,
+      });
       onPlay(`pron/${r.result.outputPath}`, r.mediaUrl);
     } catch (e) { notify(errorText(e), true); } finally { setTesting(false); }
   };

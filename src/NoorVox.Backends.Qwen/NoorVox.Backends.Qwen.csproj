@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Qwen3-TTS adapter (ADR-0002): drives the engine pack's Python sidecar. No inference code here; only NoorVox.Worker references it. -->
+  <ItemGroup>
+    <ProjectReference Include="..\NoorVox.Core\NoorVox.Core.csproj" />
+  </ItemGroup>
+</Project>

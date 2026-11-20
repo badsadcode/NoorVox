@@ -57,7 +57,7 @@ public class StorageAuditTests
         Assert.EndsWith(".zip", zip);
         using var archive = ZipFile.OpenRead(zip);
         var names = archive.Entries.Select(e => e.FullName).ToList();
-        Assert.Equal(["environment.json", "settings.json", "storage-audit.json", "models.json", "workers.json", "logs/studio.log", "README.txt"], names);
+        Assert.Equal(["environment.json", "settings.json", "storage-audit.json", "models.json", "workers.json", "engines.json", "logs/studio.log", "README.txt"], names);
         using var reader = new StreamReader(archive.GetEntry("settings.json")!.Open());
         var settings = reader.ReadToEnd();
         Assert.DoesNotContain("Secret Stuff", settings);          // recent project paths reduced to folder names
@@ -84,7 +84,7 @@ public class ProjectManagementTests : IDisposable
         new PackageManifest { Id = "kokoro-82m", Version = "1.0", Backend = "kokoro-onnx", DefaultVoice = "af_heart", Files = [new("kokoro.onnx", 1, new string('a', 64))] },
         "X:\\fake", [new PackageManifest { Kind = "voicePack", Id = "p", Files = [new("voices/af_heart.npy", 1, "x")] }]);
 
-    static Task<SynthesisResult> Synth(string text, string voice, double speed, string output, CancellationToken ct)
+    static Task<SynthesisResult> Synth(string text, string voice, double speed, string? style, string output, CancellationToken ct)
     {
         WavWriter.WritePcm16(output, new byte[4800], 24_000);
         return Task.FromResult(new SynthesisResult(output, 24_000, 1, 16, 2400, 100, 1));

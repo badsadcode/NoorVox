@@ -165,24 +165,31 @@ public static class ProjectCommands
         var s = Storage();
         var p = Open(ctx);
         var voice = ctx.Args.Require("voice");
-        var model = Model(s, p);
-        if (!model.Voices.Any(v => v.VoiceId == voice))
+        var speakerId = ctx.Args.Get("speaker");
+        var newModel = ctx.Args.Get("model");
+        if (newModel is not null && speakerId is not null)
+            throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "--model sets the whole project's model; use it without --speaker.");
+        var model = newModel is not null ? new ModelRegistry(s).Resolve(newModel) : Model(s, p);
+        if (!model.HasVoice(voice))
             throw new NoorVoxException(ErrorCodes.VoiceNotFound, ExitCode.ModelMissing, $"Voice '{voice}' is not installed for {model.Reference}.");
         double? speed = ctx.Args.Has("speed") ? ctx.Args.GetDouble("speed", 1) : null;
-        if (speed is < 0.5 or > 2.0) throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "--speed must be 0.5–2.0.");
-        var speakerId = ctx.Args.Get("speaker");
+        string? style = ctx.Args.Has("style") ? ctx.Args.Get("style")?.Trim() ?? "" : null; // "" clears it
+        Core.Narration.NarrationService.CheckCapabilities(model, speed ?? 1.0, style, null, null);
         p.MutateProject(proj =>
         {
             if (speakerId is null)
             {
+                if (newModel is not null) proj.Defaults.Model = model.Id;
                 proj.Defaults.VoiceId = voice;
                 if (speed is { } sp) proj.Defaults.Speed = sp;
+                if (style is not null) proj.Defaults.Style = style.Length == 0 ? null : style;
                 return;
             }
             var sp2 = proj.Speakers.FirstOrDefault(x => x.SpeakerId == speakerId)
                 ?? throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, $"No speaker '{speakerId}'. Known: {string.Join(", ", proj.Speakers.Select(x => x.SpeakerId))}");
             sp2.VoiceId = voice;
             if (speed is not null) sp2.Speed = speed;
+            if (style is not null) sp2.Style = style.Length == 0 ? null : style;
         });
         return Task.FromResult(new CommandResult(new { defaults = p.Project.Defaults, speakers = p.Project.Speakers },
             speakerId is null ? $"Default voice set to {voice}." : $"Speaker '{speakerId}' now speaks with {voice}."));

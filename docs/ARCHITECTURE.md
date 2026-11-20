@@ -1,6 +1,6 @@
-# NoorVox architecture (as implemented, 0.1.0)
+# NoorVox architecture (as implemented, 0.3.0)
 
-Decisions and measurements: [ADR-0001](adr/0001-kokoro-backend-and-worker-model.md). Target design: [design/NOORVOX_DESIGN.md](design/NOORVOX_DESIGN.md).
+Decisions and measurements: [ADR-0001](adr/0001-kokoro-backend-and-worker-model.md), [ADR-0002](adr/0002-qwen3-tts-and-gpu.md) (Qwen3-TTS, GPU). Target design: [design/NOORVOX_DESIGN.md](design/NOORVOX_DESIGN.md).
 
 ```text
  noorvox.exe (CLI) ──────────┐      ┌──── NoorVoxStudio.exe (WPF) ── WebView2 ── React UI (https://app.noorvox.local)
@@ -13,8 +13,9 @@ Decisions and measurements: [ADR-0001](adr/0001-kokoro-backend-and-worker-model.
          disk only  │   ┌──────────────────────┐  named pipe (current user only) + per-launch token
                     │   │  NoorVox.Worker.exe  │◄──────────────────────────────────────────────────
                     │   │  WorkerHost          │
-                    │   │  └ ITtsBackend       │  NoorVox.Backends.Kokoro → KokoroSharp → ONNX Runtime (CPU)
-                    │   └──────────────────────┘
+                    │   │  └ ITtsBackend       │  NoorVox.Backends.Kokoro → KokoroSharp → ONNX Runtime (CPU, or CUDA from an engine pack)
+                    │   │    chosen per model    │  NoorVox.Backends.Qwen ─ stdin/stdout JSON ─► python.exe noorvox_qwen.py
+                    │   └──────────────────────┘     (engine pack Python, own kill-on-close Job Object) → PyTorch CUDA
                     ▼
    <home>\settings.json · <home>\runtime\workers\<id>.json · <models>\<id>\<ver>\… · <temp>\logs\worker-<id>.log
 ```
@@ -121,7 +122,9 @@ C: is allowed; nothing hard-codes or forbids a drive. Reading settings never cre
 | Unload | Recycle the process (ADR-0001: in-process dispose kept about 370 MB resident). |
 | Stop | Graceful `shutdown` (drains the current job), bounded wait, then error `worker_stop_timeout`. Force = kill process tree. The worker deletes its own record on clean exit, only if the PID matches. |
 | Idle timeout | The worker exits itself after N idle seconds (persistent default 900 s). Status pings don't count as activity. |
-| Resources | Working set, private bytes and CPU time are self-reported, with `sampledAt` and `source`. GPU is always reported as unavailable (CPU provider); no fake zeroes. |
+| Resources | Working set, private bytes and CPU time are self-reported, with `sampledAt` and `source`. Qwen workers add `gpuMemory` (from `torch.cuda`, sampled after each load/synthesis) and `sidecar` (the Python engine's PID and memory, measured live). Kokoro reports GPU as unavailable (ONNX Runtime has no memory API); no fake zeroes. |
+| Backend choice | A worker starts without a backend; `load` creates `KokoroBackend` or `QwenBackend` from the model manifest's `backend`. The supervisor passes paths the backend needs (`BackendLoadOptions`: engine folder, sidecar script, cache, Kokoro provider, CUDA DLL folders), so the worker never reads settings. |
+| Python sidecar | `QwenBackend` starts the engine's `python.exe -I -u noorvox_qwen.py` with redirected stdio, assigns it to a worker-owned Job Object (kill on close), and closes stdin to stop it (the script exits on EOF). Library output goes to stderr, copied into the worker log; stdout carries only protocol lines. |
 
 ### Single broker vs. this design
 
@@ -137,9 +140,10 @@ and provenance (text sha256, voice, speed, model sha256, backend, worker, timing
 
 ## Known limitations (Phase 1)
 
-- CPU only. DirectML fails on Kokoro's ConvTranspose; CUDA is untested (needs CUDA 12 + cuDNN 9).
+- Kokoro runs on CPU by default; CUDA is opt-in via engine packs (ADR-0002). DirectML fails on Kokoro's ConvTranspose.
+- Qwen needs an NVIDIA GPU; there is no CPU fallback (it would be far slower than real time).
 - Synthesis can't be cancelled mid-job (a KokoroSharp limitation): cancel = force-stop or recycle the worker.
-- Output is not bit-reproducible run to run, so take identity uses inputs, not audio hashes.
+- Kokoro output is not bit-reproducible run to run, so take identity uses inputs, not audio hashes. Qwen output is reproducible with a seed (recorded per take).
 - Assembly output is WAV only (no MP3/AAC) and normalisation is peak-based, not LUFS. Segment split/merge and drag reordering aren't implemented.
 - Very large projects (thousands of segments) load the whole overview at once; list virtualisation is future work.
 - The studio's Export uses a native Save dialog, which the smoke test can't automate. It was verified by hand on 2026-11-20 (WAV + `.noorvox.json` written to Exports); re-check it manually after changes.

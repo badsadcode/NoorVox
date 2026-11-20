@@ -66,7 +66,7 @@ public class AssemblyTests : IDisposable
         new PackageManifest { Id = "kokoro-82m", Version = "1.0", Backend = "kokoro-onnx", DefaultVoice = "af_heart", Files = [new("kokoro.onnx", 1, new string('a', 64))] },
         "X:\\fake", [new PackageManifest { Kind = "voicePack", Id = "p", Files = [new("voices/af_heart.npy", 1, "x"), new("voices/bm_george.npy", 1, "x")] }]);
 
-    static Task<SynthesisResult> HalfSecond(string text, string voice, double speed, string output, CancellationToken ct)
+    static Task<SynthesisResult> HalfSecond(string text, string voice, double speed, string? style, string output, CancellationToken ct)
     {
         var pcm = new byte[12_000 * 2];
         for (int i = 0; i < 12_000; i++) { pcm[i * 2] = 0x00; pcm[i * 2 + 1] = 0x20; } // 8192 = 0.25 full scale

@@ -125,7 +125,7 @@ public sealed class JobObject : IDisposable
         finally { Marshal.FreeHGlobal(ptr); }
     }
 
-    internal bool Assign(IntPtr processHandle) => AssignProcessToJobObject(_handle, processHandle);
+    public bool Assign(IntPtr processHandle) => AssignProcessToJobObject(_handle, processHandle);
 
     public void Dispose()
     {

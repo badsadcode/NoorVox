@@ -44,13 +44,13 @@ when available (for example a `hint` with the command that fixes the problem). T
 |---:|---|---|
 | 0 | Success | `ok` |
 | 1 | Internal error (bug) | `internal_error` |
-| 2 | Invalid arguments | `invalid_arguments` |
+| 2 | Invalid arguments | `invalid_arguments`, `unsupported` (a control the model doesn't have, e.g. `--speed` on Qwen) |
 | 3 | Configuration error | `config_error` |
-| 4 | Model or voice missing | `model_not_installed`, `voice_not_found`, `unknown_model` |
+| 4 | Model or voice missing | `model_not_installed`, `voice_not_found`, `unknown_model`, `engine_not_installed` |
 | 5 | Invalid input text | `invalid_input` |
 | 6 | Worker busy / already running | `worker_busy`, `worker_already_running` |
-| 7 | Worker failure | `worker_start_failed`, `worker_unresponsive`, `worker_stop_timeout`, `worker_error`, `model_load_failed` |
-| 8 | Synthesis failed | `synthesis_failed` |
+| 7 | Worker failure | `worker_start_failed`, `worker_unresponsive`, `worker_stop_timeout`, `worker_error`, `model_load_failed`, `engine_broken`, `gpu_required` |
+| 8 | Synthesis failed | `synthesis_failed`, `gpu_out_of_memory` |
 | 9 | File system | `io_error`, `permission_denied`, `output_exists` |
 | 10 | Download / verification | `download_failed`, `verification_failed` |
 | 11 | Cancelled (Ctrl+C) | `cancelled` |
@@ -84,15 +84,63 @@ Writes a support zip with `environment.json`, `settings.json` (recent project pa
 Default: `<exports>\noorvox-support-<timestamp>.zip`. `data`: `path`, `bytes`.
 
 ### `noorvox models list`
-`data.installed[]` lists installed models: `reference`, `path`, `modelSha256`, `license`, `source`, `origin` (`download`/`import`), `voices` (count) and `voicePacks`.
-`data.catalog[]` lists models NoorVox can install, with `downloadBytes`, `installed` and `updateAvailable`.
+`data.installed[]` lists installed models: `reference`, `path`, `modelSha256`, `license`, `source`, `origin` (`download`/`import`), `voices` (count),
+`voicePacks`, `capabilities` and `engine`.
+`data.catalog[]` lists models NoorVox can install, with `downloadBytes`, `installed`, `updateAvailable`, `capabilities`, `engine` and `minVramGb`.
 
-### `noorvox models install <id[@version]> [--no-voices]`
+`capabilities` says which controls are real for that model (only these are accepted by `synth`, `projects cast` and the studio):
+
+| Field | Kokoro 82M | Qwen3-TTS CustomVoice 1.7B | CustomVoice 0.6B | Base 1.7B / 0.6B |
+|---|---|---|---|---|
+| `speed` (`minSpeed`–`maxSpeed`) | yes, 0.5–2.0 | no | no | no |
+| `style` (written directions) | no | yes | no | no |
+| `cloning` (voice profiles) | no | no | no | yes |
+| `blending` | yes | no | no | no |
+| `seed` (reproducible takes) | no | yes | yes | yes |
+| `requiresGpu` | no | NVIDIA + CUDA | NVIDIA + CUDA | NVIDIA + CUDA |
+| `languages` | — (the voice decides) | `auto`, `english`, `chinese`, `japanese`, `korean`, `german`, `french`, `russian`, `portuguese`, `spanish`, `italian` | same | same |
+
+Catalog ids: `kokoro-82m`, `qwen3-tts-1.7b-customvoice`, `qwen3-tts-1.7b-base`, `qwen3-tts-0.6b-customvoice`, `qwen3-tts-0.6b-base`.
+
+### `noorvox models install <id[@version]> [--no-voices] [--no-engine]`
 Downloads from the catalog URL into `<cache>\staging`, resuming an interrupted download where it left off. It checks the
 size and sha256 of every download and every file, moves the files into `<models>\<id>\<version>\`, and writes the
 manifest last. By default it also installs the model's default voice packs. Running it again on an installed model does nothing
 (`status: alreadyInstalled`, `bytesDownloaded: 0`).
 Example: `noorvox models install kokoro-82m`.
+
+A model that needs an engine pack (Qwen: `qwen-tts`) gets it installed first unless you pass `--no-engine`; the engine result is listed
+in `data.voicePacks` next to voice packs. Qwen models are multi-file Hugging Face snapshots at a pinned revision; files already present and
+verified in the target folder are not downloaded again.
+
+### `noorvox engines list`
+`data.engines[]`: `id`, `version`, `displayName`, `kind` (`python` | `native`), `state` (`installed`, `notInstalled`, `incomplete`,
+`updateAvailable`), `path`, `approxInstallBytes`, `license`, `source`, `requires`, `usedBy`, and `verified` (what the engine's own Python
+reported when it was installed: `python`, `torch`, `transformers`, `cuda`, `cudaVersion`, `device`, `deviceMemoryBytes`).
+
+| Engine | What it is | Needed for |
+|---|---|---|
+| `qwen-tts` | Private Python 3.12.10 (python.org NuGet package, sha256-checked) plus PyTorch 2.11 + CUDA 12.8, faster-qwen3-tts 0.5.4 and transformers 5.15.1 (~5.2 GB) | Qwen3-TTS models; also provides the CUDA/cuDNN DLLs for Kokoro on GPU |
+| `onnxruntime-cuda` | ONNX Runtime 1.22 GPU DLLs from the official NuGet package (~330 MB) | `gpu set --kokoro cuda` |
+
+### `noorvox engines install <qwen-tts|onnxruntime-cuda>`
+Installs into `<models>\engines\<id>\<version>\`. Python engines run `pip install --require-hashes --no-deps --only-binary=:all:` with
+a lock embedded in NoorVox: every package is pinned to an exact version **and** its sha256, so nothing unverified is installed. pip's cache
+lives in `<cache>\pip`. The manifest `noorvox.engine.json` is written last, after an import + CUDA check; until then the engine counts as
+`incomplete`, and running the command again resumes. pip's output is passed through as progress (`[done/total packages]`).
+
+### `noorvox engines remove <id>`
+Deletes the engine folder. Models, voice profiles and takes are untouched; Qwen models can't load until the engine is installed again.
+
+### `noorvox gpu status`
+`data.kokoroProvider` (`cpu`/`cuda`), `kokoroCudaReady` (both engine packs installed), `engines` paths, and `detected`: the GPU as PyTorch
+saw it when the `qwen-tts` engine was installed (`detectedAt`). This is a stored measurement, not a live probe.
+
+### `noorvox gpu set --kokoro cpu|cuda`
+Chooses Kokoro's execution provider for workers that load it afterwards (`workers unload` to apply now). With `cuda`, the worker loads
+ONNX Runtime's GPU build from the `onnxruntime-cuda` engine and CUDA 12 / cuDNN 9 from the `qwen-tts` engine. If either is missing, or
+CUDA fails, Kokoro runs on the CPU and the worker reports why (`workers status` → `error` note, `executionProvider: CPU`).
+Measured on an RTX 3080: CPU real-time factor 0.17, CUDA 0.09, same speech (ADR-0002).
 
 ### `noorvox models update [--check]`
 For each installed model id, installs the newest catalog version alongside the existing one, plus any missing default voice packs.
@@ -108,6 +156,8 @@ Re-hashes all files (sha256) of one model or all installed models, including the
 Fails with `verification_failed` (exit 10) and per-file problems in `data`.
 
 ### `noorvox voices list [--model REF] [--language CODE]`
+Each voice has `id`, `language`, `languageName`, `gender`, `displayName`, `packId`, `kind` (`pack`, `blend`, `built-in` for Qwen's nine
+speakers, `clone` for voice profiles) and an optional `description`.
 Lists installed voices (from the installed voice packs). Each voice has `id` (e.g. `af_heart`), `language` (`en-us`, `en-gb`, `ja`, `zh`, `es`, `fr`, `hi`, `it`, `pt-br`), `languageName`, `gender`, `displayName` and `packId`.
 No worker is needed.
 
@@ -122,6 +172,24 @@ Creates a new voice as a weighted average of 2–4 installed voices, e.g. `--mix
 - Blends are **immutable**: an existing id is refused (`output_exists`, exit 9), because takes are matched by voice id. Create a new name instead.
 
 `data`: `voiceId, name, path, sha256, parts[] {voiceId, weight}, language`.
+
+### `noorvox voices clone --name NAME --reference FILE.wav (--transcript TEXT | --transcript-file FILE) --consent own-voice|speaker-permission [--language NAME] [--gender female|male]`
+Creates a **voice profile** for models that can clone (Qwen3-TTS Base). The reference must be a PCM WAV of 2–60 s (5–15 s of clean,
+single-speaker speech works best); the transcript is exactly what is said in it. `--consent` is required and stored verbatim with the
+profile:
+
+| `--consent` | Stored statement |
+|---|---|
+| `own-voice` | "This recording is my own voice." |
+| `speaker-permission` | "I have the speaker's permission to create and use a synthetic copy of their voice." |
+
+The recording is **copied** into `<models>\voice-profiles\<voiceId>\reference.wav` with its sha256; only the original *file name*
+is recorded, never its path. Profiles are immutable (a second profile with the same name fails with `output_exists`). The voice id is
+derived from the name (`"Tom Narrator"` → `tom_narrator`) and appears in `voices list` of every cloning model with `kind: clone`.
+`synth` output and take records then carry `voiceKind: clone`.
+
+### `noorvox voices remove-profile --voice ID`
+Deletes a voice profile (its reference copy and consent record). Takes and exports already made with it are not touched.
 
 ### `noorvox voices install <pack-id[@version]> [--model REF]`
 Downloads, verifies and installs a voice pack into an installed model. It uses the same staging and verification as `models install`.
@@ -167,8 +235,11 @@ Stopping a crashed (`error`) worker clears its stale record. `--graceful` is acc
 |---|---|---|
 | `--out FILE.wav` | `<exports>\noorvox_<timestamp>.wav` | Must end in `.wav`. The folder is created if needed. |
 | `--voice ID` | settings → model default (`af_heart`) | Must be installed (`voices list`). |
-| `--speed X` | `1.0` | 0.5 – 2.0. This is the only delivery control Kokoro really supports. |
-| `--model REF` | settings → first installed | `kokoro-82m` or `kokoro-82m@1.0` |
+| `--speed X` | `1.0` | Kokoro: 0.5 – 2.0. Models without a speed control (Qwen) accept only 1.0 (`unsupported` otherwise). |
+| `--style TEXT` | — | Delivery directions, e.g. `"Calm, warm documentary narration. Speak slowly."` Only models with `capabilities.style` (Qwen CustomVoice 1.7B). Max 500 characters. |
+| `--seed N` | random | 0 – 2147483647. Models with `capabilities.seed` (Qwen): the same seed, text, settings, GPU and engine give a byte-identical take. The seed used is always reported in `data.seed`. |
+| `--language NAME` | `auto` / profile language | Models with `capabilities.languages` (Qwen): `auto`, `english`, `chinese`, … |
+| `--model REF` | settings → first installed | e.g. `kokoro-82m`, `qwen3-tts-1.7b-customvoice@1.0` |
 | `--worker ID` | — | Use this specific worker; it is started (bound to this CLI call) if it isn't running. |
 | `--keep-worker` | off | Leave the worker running afterwards (persistent `default`, with the idle timeout). |
 | `--overwrite` | off | Replace an existing `--out`. |
@@ -183,7 +254,12 @@ Stopping a crashed (`error`) worker clears its stale record. `--graceful` is acc
 **Output** (`data`): `outputPath`, `durationMs`, `durationSeconds`, `sampleRate` (24000), `channels` (1), `bitsPerSample` (16),
 `samples`, `bytes`, `text {chars, sha256}`, `voice`, `speed`, `model {id, version, modelSha256, license}`,
 `backend {id, executionProvider}`, `worker {id, reused, startedForRequest, stoppedAfter, stateAfter}`,
-`timings {synthesisMs, totalMs, realTimeFactor}`, `createdAt`, `generator` and, with `--manifest`, `manifestPath`.
+`timings {synthesisMs, totalMs, realTimeFactor}`, `createdAt`, `generator`, `style`, `seed`, `language`, `voiceKind`
+(`pack`/`blend`/`built-in`/`clone`) and, with `--manifest`, `manifestPath`. Qwen output is 24 kHz mono 16-bit, like Kokoro.
+
+Qwen models load in their engine's Python process (the worker's child, in the worker's kill-on-close Job Object). The first load of a 1.7B
+model reads ~4.5 GB and captures CUDA graphs: expect 30 s to several minutes on an HDD; later syntheses in a kept worker are ~2.6× faster
+than real time on an RTX 3080. Use `--keep-worker` (or `workers start --model …`) for more than one line.
 
 Durations are **measured from the written WAV's samples**, never estimated. The file is synthesized into `<temp>\synth`,
 validated as PCM WAV, then moved to `--out`; a failed run leaves no partial file at `--out`.
@@ -238,9 +314,11 @@ Adds or replaces the rule for `WORD` (whole words and case-insensitive by defaul
 ### `noorvox pronunciation remove --project DIR --match WORD`
 Removes the rule (exit 2 if there is none).
 
-### `noorvox projects cast --project DIR [--speaker ID] --voice ID [--speed X]`
-Without `--speaker`, sets the project default voice (and speed). With `--speaker`, sets that character's voice. Approved takes are untouched;
-affected segments become `stale` until regenerated and approved.
+### `noorvox projects cast --project DIR [--speaker ID] --voice ID [--speed X] [--style TEXT] [--model REF]`
+Without `--speaker`, sets the project default voice (and speed/style); `--model` switches the whole project to another installed model
+(e.g. `qwen3-tts-1.7b-customvoice`). With `--speaker`, sets that character's voice and optional style (`--style ""` clears it). Options
+are checked against the model's capabilities. Approved takes are untouched; affected segments become `stale` until regenerated and approved.
+A segment can override the style in its section file (`"style": "whispering"`), see PROJECT_FORMAT.md.
 
 ### `noorvox generate --project DIR [--section ID] [--scene ID] [--segment ID[,ID…]] [--policy missing|all] [--approve] [--worker ID] [--keep-worker]`
 Creates a **job** for the scope (default: whole project) and runs it now, one segment at a time, using the same worker rules as `synth`.
@@ -337,5 +415,5 @@ Joins each section's approved takes into **one WAV** (all sections if `--section
 
 ## Not implemented yet (planned)
 
-GPU execution, remote catalog refresh, `models remove`, segment split/merge/reorder from the CLI, MP3/other codecs, loudness (LUFS)
+Remote catalog refresh, Qwen VoiceDesign (voice from a description), streaming playback, `models remove`, segment split/merge/reorder from the CLI, MP3/other codecs, loudness (LUFS)
 normalisation, word-level alignment. See docs/design/NOORVOX_DESIGN.md §12 for the original target contract.

@@ -33,7 +33,7 @@ public class ProjectTests : IDisposable
     {
         public int Calls;
         public List<string> Texts { get; } = [];
-        public Task<SynthesisResult> Invoke(string text, string voice, double speed, string output, CancellationToken ct)
+        public Task<SynthesisResult> Invoke(string text, string voice, double speed, string? style, string output, CancellationToken ct)
         {
             Calls++;
             if (Calls == cancelOnCall) throw new OperationCanceledException();

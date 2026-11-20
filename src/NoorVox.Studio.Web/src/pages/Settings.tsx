@@ -108,7 +108,18 @@ export function Settings() {
                 {voices?.voices.map((v) => <option key={v.id} value={v.id}>{v.displayName} · {v.languageName} · {v.gender}</option>)}
               </select>
             </div>
-            <p className="note">Execution: CPU (about 6× faster than real time for long passages on this kind of PC). GPU acceleration isn't available yet, and NoorVox won't claim it is.</p>
+            <div style={{ maxWidth: 520 }}>
+              <label className="field" htmlFor="kokoro-provider">Run Kokoro on</label>
+              <select id="kokoro-provider" value={s?.kokoroProvider ?? "cpu"} onChange={(e) => save({ kokoroProvider: e.target.value })}>
+                <option value="cpu">CPU (default)</option>
+                <option value="cuda">NVIDIA GPU (CUDA)</option>
+              </select>
+              <p className="note" style={{ marginTop: 8 }}>
+                Measured on an RTX 3080: Kokoro generated about 11× faster than real time on the GPU and 6× on the CPU, with the same voice.
+                The GPU option needs the “ONNX Runtime CUDA provider” and “Qwen3-TTS engine” packs (Models page). Without them, or if CUDA
+                fails, Kokoro stays on the CPU and the Monitor says so. Qwen models always run on the GPU.
+              </p>
+            </div>
           </div>
         </section>
 

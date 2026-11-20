@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using KokoroSharp;
 using KokoroSharp.Core;
 using KokoroSharp.Processing;
@@ -11,43 +12,89 @@ using NoorVox.Core.Models;
 
 namespace NoorVox.Backends.Kokoro;
 
-/// <summary>Kokoro-82M via KokoroSharp + ONNX Runtime (CPU). See ADR-0001.</summary>
-public sealed class KokoroBackend : ITtsBackend
+/// <summary>
+/// Kokoro-82M via KokoroSharp + ONNX Runtime. CPU by default (ADR-0001); CUDA when the settings ask for it and the
+/// onnxruntime-cuda + qwen-tts engine packs are installed (ADR-0002), falling back to CPU with a note otherwise.
+/// </summary>
+public sealed class KokoroBackend(Action<string>? log = null) : ITtsBackend, IBackendResources
 {
     public const int SampleRate = 24_000;
+    const double MinSpeed = 0.5, MaxSpeed = 2.0;
+    static string? _ortOverrideDir;
     KokoroWavSynthesizer? _synth;
     InstalledModel? _model;
     readonly Dictionary<string, KokoroVoice> _voices = new(StringComparer.Ordinal);
+    string? _version;
 
     public string BackendId => "kokoro-onnx";
 
-    public string BackendVersion { get; } =
-        $"KokoroSharp {typeof(KokoroWavSynthesizer).Assembly.GetName().Version?.ToString(3)}; ONNX Runtime {OrtEnv.Instance().GetVersionString()}";
+    public string BackendVersion => _version ??= _synth is null ? "KokoroSharp (not loaded)"
+        : $"KokoroSharp {typeof(KokoroWavSynthesizer).Assembly.GetName().Version?.ToString(3)}; ONNX Runtime {OrtEnv.Instance().GetVersionString()}";
 
-    public TtsCapabilities Capabilities { get; } = new(
-        Speed: true, MinSpeed: 0.5, MaxSpeed: 2.0,
-        VoiceMixing: true, Pitch: false, Style: false, Emotion: false,
-        PhonemeTimestamps: true, Deterministic: false,
-        ExecutionProviders: ["CPU"]);
-
-    public string ExecutionProvider => "CPU";
+    public string ExecutionProvider { get; private set; } = "";
     public bool IsLoaded => _synth is not null;
+    public GpuMemoryInfo? Gpu => null;
+    public SidecarInfo? Sidecar => null;
+    public string? ProviderNote { get; private set; }
 
-    public Task LoadAsync(InstalledModel model, CancellationToken ct) => Task.Run(() =>
+    public Task LoadAsync(InstalledModel model, BackendLoadOptions options, CancellationToken ct) => Task.Run(() =>
     {
         if (_synth is not null) throw new InvalidOperationException("A model is already loaded; recycle the worker to change models.");
-        _synth = new KokoroWavSynthesizer(model.ModelFile, new SessionOptions());
+        bool wantCuda = options.ExecutionProvider == "cuda";
+        if (wantCuda && (options.OrtCudaDirectory is null || options.CudaLibraryDirectories is not { Count: > 0 }))
+        {
+            wantCuda = false;
+            ProviderNote = "CUDA requested, but the onnxruntime-cuda and qwen-tts engine packs are not both installed; using CPU.";
+        }
+        if (wantCuda) UseCudaRuntime(options);
+
+        var so = new SessionOptions();
+        ExecutionProvider = "CPU";
+        if (wantCuda)
+        {
+            try
+            {
+                so.AppendExecutionProvider_CUDA(0);
+                ExecutionProvider = "CUDA";
+            }
+            catch (Exception ex)
+            {
+                so.Dispose();
+                so = new SessionOptions();
+                ProviderNote = $"CUDA requested but unavailable ({ex.Message}); using CPU.";
+            }
+        }
+        if (ProviderNote is not null) log?.Invoke(ProviderNote);
+        _synth = new KokoroWavSynthesizer(model.ModelFile, so);
         _model = model;
+        log?.Invoke($"kokoro execution provider: {ExecutionProvider}");
     }, ct);
+
+    /// <summary>
+    /// Loads ONNX Runtime's GPU build from the onnxruntime-cuda engine pack instead of the CPU build next to the worker,
+    /// and lets it find CUDA/cuDNN in the qwen-tts engine's PyTorch folder. Must run before any ONNX Runtime call.
+    /// </summary>
+    static void UseCudaRuntime(BackendLoadOptions options)
+    {
+        if (_ortOverrideDir is not null) return;
+        _ortOverrideDir = options.OrtCudaDirectory!;
+        var path = Environment.GetEnvironmentVariable("PATH") ?? "";
+        Environment.SetEnvironmentVariable("PATH", string.Join(';', options.CudaLibraryDirectories!.Prepend(_ortOverrideDir)) + ";" + path);
+        NativeLibrary.SetDllImportResolver(typeof(OrtEnv).Assembly, (name, asm, search) =>
+            name.StartsWith("onnxruntime", StringComparison.OrdinalIgnoreCase)
+                && NativeLibrary.TryLoad(Path.Combine(_ortOverrideDir, "onnxruntime.dll"), out var h) ? h : IntPtr.Zero);
+    }
 
     public async Task<SynthesisResult> SynthesizeAsync(SynthesisRequest request, string outputWavPath, CancellationToken ct)
     {
         if (_synth is null || _model is null) throw new InvalidOperationException("No model loaded.");
         if (string.IsNullOrWhiteSpace(request.Text))
             throw new NoorVoxException(ErrorCodes.InvalidInput, ExitCode.InvalidInput, "Text is empty.");
-        if (request.Speed < Capabilities.MinSpeed || request.Speed > Capabilities.MaxSpeed)
+        if (request.Speed < MinSpeed || request.Speed > MaxSpeed)
             throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments,
-                $"Speed {request.Speed} is outside Kokoro's supported range {Capabilities.MinSpeed}-{Capabilities.MaxSpeed}.");
+                $"Speed {request.Speed} is outside Kokoro's supported range {MinSpeed}-{MaxSpeed}.");
+        if (!string.IsNullOrWhiteSpace(request.Style))
+            throw new NoorVoxException(ErrorCodes.Unsupported, ExitCode.InvalidArguments, "Kokoro does not take style directions.");
 
         var voice = GetVoice(request.VoiceId);
         var sw = Stopwatch.StartNew();
@@ -77,6 +124,8 @@ public sealed class KokoroBackend : ITtsBackend
         if (!KokoroVoiceNames.IsValidId(voiceId) || entry.VoiceId is null)
             throw new NoorVoxException(ErrorCodes.VoiceNotFound, ExitCode.ModelMissing,
                 $"Voice '{voiceId}' is not installed for {_model.Reference}.", new { voiceId, model = _model.Reference });
+        if (entry.File is null)
+            throw new NoorVoxException(ErrorCodes.VoiceNotFound, ExitCode.ModelMissing, $"Voice '{voiceId}' is not a Kokoro voice file.");
         var voice = KokoroVoice.FromPath(Path.Combine(_model.Directory, entry.File.Path));
         _voices[voiceId] = voice;
         return voice;

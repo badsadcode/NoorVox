@@ -68,7 +68,7 @@ export function Monitor() {
               <div style={{ minWidth: 0 }}>
                 <div className="row" style={{ marginBottom: 6 }}>
                   <b style={{ fontSize: 16 }}>{w.workerId === "studio" ? "Voice engine" : w.workerId}</b>
-                  <span className="pill">{w.backend === "kokoro-onnx" ? "Kokoro (ONNX)" : w.backend ?? "worker"}</span>
+                  <span className="pill">{w.backend === "kokoro-onnx" ? "Kokoro (ONNX)" : w.backend === "qwen3-tts" ? "Qwen3-TTS (PyTorch)" : w.backend || "no model yet"}</span>
                 </div>
                 <StateBadge state={w.state} />
                 <div className="muted small" style={{ marginTop: 6 }}>{owner} · {lifetime}</div>
@@ -77,11 +77,27 @@ export function Monitor() {
               </div>
 
               <div className="metrics">
-                <div className="metric"><span>Model</span><b title={w.loadedModel?.modelSha256}>{w.loadedModel ? `Kokoro ${w.loadedModel.version}` : "none loaded"}</b></div>
-                <div className="metric"><span>Memory</span><b>{fmtBytes(w.resources?.workingSetBytes)}</b></div>
+                <div className="metric"><span>Model</span><b title={w.loadedModel?.modelSha256}>{w.loadedModel ? `${w.loadedModel.id} ${w.loadedModel.version}` : "none loaded"}</b></div>
+                <div className="metric"><span>Memory</span><b title="Worker process working set">{fmtBytes(w.resources?.workingSetBytes)}</b></div>
                 <div className="metric"><span>CPU</span><b>{cpu[w.workerId] != null ? `${cpu[w.workerId].toFixed(0)} %` : "measuring…"}</b></div>
                 <div className="metric"><span>Provider</span><b>{w.executionProvider || "—"}</b></div>
-                <div className="metric"><span>GPU</span><b title={w.resources?.gpu}>unavailable</b></div>
+                {w.resources?.sidecar && (
+                  <div className="metric" title={`${w.resources.sidecar.description}, PID ${w.resources.sidecar.pid}, measured ${new Date(w.resources.sidecar.sampledAt).toLocaleTimeString()}`}>
+                    <span>Engine memory</span><b>{fmtBytes(w.resources.sidecar.workingSetBytes)}</b>
+                  </div>
+                )}
+                {w.resources?.gpuMemory ? (
+                  <div className="metric" title={`${w.resources.gpuMemory.source} · ${new Date(w.resources.gpuMemory.sampledAt).toLocaleTimeString()}`}>
+                    <span>GPU memory</span>
+                    <b>{fmtBytes(w.resources.gpuMemory.reservedBytes)} <span className="muted small">of {fmtBytes(w.resources.gpuMemory.deviceTotalBytes)}</span></b>
+                    <div className="gpu-bar" aria-hidden="true">
+                      <i style={{ width: `${Math.min(100, (w.resources.gpuMemory.reservedBytes / w.resources.gpuMemory.deviceTotalBytes) * 100)}%` }} />
+                    </div>
+                    <span className="muted small">{w.resources.gpuMemory.device} · {fmtBytes(w.resources.gpuMemory.deviceFreeBytes)} free on the card</span>
+                  </div>
+                ) : (
+                  <div className="metric"><span>GPU</span><b title={w.resources?.gpu}>unavailable</b></div>
+                )}
                 <div className="metric"><span>Jobs done</span><b>{w.jobsCompleted ?? "—"}</b></div>
                 <div className="metric" style={{ gridColumn: "1 / -1" }}>
                   <span>Current work</span>

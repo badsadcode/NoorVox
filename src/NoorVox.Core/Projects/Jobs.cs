@@ -62,7 +62,7 @@ public sealed class JobItem
 public sealed record JobProgress(string JobId, string State, int Done, int Total, int Failed, string? CurrentSegmentId, JobItem? LastItem);
 
 /// <summary>Synthesizes text to a WAV at <c>outputWav</c> and returns measured facts. Production: a worker; tests: a fake.</summary>
-public delegate Task<SynthesisResult> SegmentSynthesizer(string text, string voiceId, double speed, string outputWav, CancellationToken ct);
+public delegate Task<SynthesisResult> SegmentSynthesizer(string text, string voiceId, double speed, string? style, string outputWav, CancellationToken ct);
 
 /// <summary>
 /// Batch generation that survives interruption. Each finished item is committed (WAV moved into place, take JSON written,
@@ -293,8 +293,9 @@ public sealed class JobRunner(ProjectStore store, InstalledModel model)
             return;
         }
         var eff = store.Effective(seg, model, pron);
-        if (!model.Voices.Any(v => v.VoiceId == eff.VoiceId))
+        if (!model.HasVoice(eff.VoiceId))
             throw new NoorVoxException(ErrorCodes.VoiceNotFound, ExitCode.ModelMissing, $"Voice '{eff.VoiceId}' is not installed.");
+        Narration.NarrationService.CheckCapabilities(model, eff.Speed, eff.Style, null, null);
         var takes = store.Takes(seg.SegmentId);
 
         TakeRecord? take = job.Policy == "missing" ? takes.LastOrDefault(t => t.CacheKey == eff.CacheKey) : null;
@@ -325,7 +326,7 @@ public sealed class JobRunner(ProjectStore store, InstalledModel model)
         var tmp = Path.Combine(store.TempDir, $"{Guid.NewGuid():N}.wav");
         try
         {
-            var r = await synth(eff.SpokenText, eff.VoiceId, eff.Speed, tmp, ct);
+            var r = await synth(eff.SpokenText, eff.VoiceId, eff.Speed, eff.Style, tmp, ct);
             var info = WavInfo.Read(tmp); // validate before committing
             var takeId = $"t{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid().ToString("N")[..4]}";
             var rel = $"takes/{seg.SegmentId}/{takeId}.wav";
@@ -335,7 +336,7 @@ public sealed class JobRunner(ProjectStore store, InstalledModel model)
             var record = new TakeRecord
             {
                 TakeId = takeId, SegmentId = seg.SegmentId, CacheKey = eff.CacheKey, SpokenText = eff.SpokenText,
-                SourceTextSha256 = FileUtil.Sha256Text(seg.Text), VoiceId = eff.VoiceId, Speed = eff.Speed,
+                SourceTextSha256 = FileUtil.Sha256Text(seg.Text), VoiceId = eff.VoiceId, Speed = eff.Speed, Style = eff.Style, Seed = r.Seed,
                 ModelId = model.Id, ModelVersion = model.Version, ModelSha256 = model.ModelSha256, Backend = model.Manifest.Backend ?? "kokoro-onnx",
                 File = rel, DurationMs = info.DurationMs, SampleRate = info.SampleRate, Samples = info.Samples,
                 CreatedAt = DateTimeOffset.Now, JobId = job.JobId, Generator = $"NoorVox {NoorVoxInfo.Version}",

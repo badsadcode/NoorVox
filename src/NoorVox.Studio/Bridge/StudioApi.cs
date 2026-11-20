@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Windows;
 using NoorVox.Core;
 using NoorVox.Core.Backends;
+using NoorVox.Core.Engines;
 using NoorVox.Core.Models;
 using NoorVox.Core.Narration;
 using NoorVox.Core.Storage;
@@ -37,7 +38,12 @@ public sealed class StudioApi(MainWindow window, JobObject job, BridgeHost bridg
         "models.overview" => ModelsOverview(),
         "models.install" => await ModelsInstall(Arg<IdArgs>(p), ct),
         "models.verify" => await ModelsVerify(Arg<IdArgs>(p), ct),
-        "voices.list" => VoicesList(),
+        "voices.list" => VoicesList(OptArg<ModelArgs>(p)?.Model),
+        "voices.chooseReference" => await ChooseReference(),
+        "voices.clone" => VoiceClone(Arg<CloneArgs>(p)),
+        "voices.removeProfile" => VoiceRemoveProfile(Arg<IdArgs>(p)),
+        "engines.list" => new { engines = new EngineRegistry(S()).List(ModelCatalog.LoadEmbedded()) },
+        "engines.install" => await EngineInstall(Arg<IdArgs>(p), ct),
         "voices.installPack" => await VoicePackInstall(Arg<IdArgs>(p), ct),
         "voices.blend" => VoiceBlend(Arg<BlendArgs>(p)),
         "workers.list" => await WorkersList(ct),
@@ -62,12 +68,16 @@ public sealed class StudioApi(MainWindow window, JobObject job, BridgeHost bridg
     public sealed record WorkerArgs(string WorkerId);
     public sealed record WorkerStopArgs(string WorkerId, bool Force);
     public sealed record ForceArgs(bool Force);
-    public sealed record GenerateArgs(string Text, string Voice, double Speed);
+    public sealed record GenerateArgs(string Text, string Voice, double Speed, string? Model, string? Style, long? Seed, string? Language);
+    public sealed record ModelArgs(string? Model);
+    public sealed record CloneArgs(string Name, string ReferenceToken, string Transcript, string Consent, string? Language, string? Gender);
     public sealed record ExportArgs(string PreviewPath, string? SuggestedName);
     public sealed record PathArgs(string Path);
-    public sealed record SettingsArgs(string? Theme, bool? StopOnExit, int? IdleTimeoutSeconds, string? DefaultVoice);
+    public sealed record SettingsArgs(string? Theme, bool? StopOnExit, int? IdleTimeoutSeconds, string? DefaultVoice, string? KokoroProvider);
     public sealed record UrlArgs(string Url);
     public sealed record BlendArgs(string Name, List<BlendPart> Parts);
+
+    static T? OptArg<T>(JsonElement? p) where T : class => p is { ValueKind: JsonValueKind.Object } e ? e.Deserialize<T>(Json.Compact) : null;
 
     static T Arg<T>(JsonElement? p) where T : class =>
         (p is { ValueKind: JsonValueKind.Object } e ? e.Deserialize<T>(Json.Compact) : null)
@@ -97,6 +107,7 @@ public sealed class StudioApi(MainWindow window, JobObject job, BridgeHost bridg
                 stopOnExit = s.Settings.Workers.StopOnExit,
                 idleTimeoutSeconds = s.Settings.Workers.IdleTimeoutSeconds,
                 defaultVoice = s.Settings.DefaultVoice,
+                kokoroProvider = s.Settings.Gpu.KokoroProvider,
             },
             home = new { path = s.Home, mode = s.Mode.ToString().ToLowerInvariant(), settingsFile = s.SettingsPath },
             workerExecutable = new { path = workerExe, exists = File.Exists(workerExe) },
@@ -168,7 +179,16 @@ public sealed class StudioApi(MainWindow window, JobObject job, BridgeHost bridg
             s.Settings.Workers.IdleTimeoutSeconds = idle;
         }
         if (a.DefaultVoice is not null) s.Settings.DefaultVoice = a.DefaultVoice.Length == 0 ? null : a.DefaultVoice;
+        bool providerChanged = false;
+        if (a.KokoroProvider is not null)
+        {
+            if (a.KokoroProvider is not ("cpu" or "cuda"))
+                throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "Kokoro provider must be cpu or cuda.");
+            providerChanged = s.Settings.Gpu.KokoroProvider != a.KokoroProvider;
+            s.Settings.Gpu.KokoroProvider = a.KokoroProvider;
+        }
         s.Save();
+        if (providerChanged) _ = RecycleIfKokoroAsync(); // the studio worker picks the provider when it loads Kokoro
         return AppInfo();
     }
 
@@ -221,6 +241,7 @@ public sealed class StudioApi(MainWindow window, JobObject job, BridgeHost bridg
                 installedAt = m.Manifest.InstalledAt, path = m.Directory, modelSha256 = m.ModelSha256,
                 sizeBytes = m.Manifest.Files.Sum(f => f.Size) + m.VoicePacks.Sum(p => p.Files.Sum(f => f.Size)),
                 voices = m.Voices.Count,
+                capabilities = m.Capabilities, engine = m.Manifest.Engine, backend = m.Backend,
                 customVoices = m.Voices.Where(v => v.PackId == VoiceBlender.CustomPackId)
                     .Select(v => VoiceBlender.Recipe(m, v.VoiceId)).Where(r => r is not null)
                     .Select(r => new { r!.VoiceId, r.Name, r.Parts, r.CreatedAt }),
@@ -235,6 +256,9 @@ public sealed class StudioApi(MainWindow window, JobObject job, BridgeHost bridg
             {
                 id = c.Id, version = c.Version, displayName = c.DisplayName, description = c.Description, recommended = c.Recommended,
                 license = c.License, licenseUrl = c.LicenseUrl,
+                capabilities = c.Capabilities ?? ModelCapabilities.Kokoro, engine = c.Engine, minVramGb = c.MinVramGb, family = c.Family ?? "kokoro",
+                engineInstalled = c.Engine is null || new EngineRegistry(s).Find(c.Engine) is not null,
+                engineBytes = c.Engine is null ? 0 : catalog.FindEngine(c.Engine)?.ApproxInstallBytes ?? 0,
                 downloadBytes = c.Downloads.Sum(d => d.Size)
                     + c.DefaultVoicePacks.Select(catalog.FindVoicePack).Where(v => v is not null).Sum(v => v!.Downloads.Sum(d => d.Size)),
                 installed = installed.Any(m => m.Id == c.Id && m.Version == c.Version),
@@ -254,6 +278,8 @@ public sealed class StudioApi(MainWindow window, JobObject job, BridgeHost bridg
         var s = S();
         var catalog = ModelCatalog.LoadEmbedded();
         var model = catalog.FindModel(a.Id) ?? throw new NoorVoxException(ErrorCodes.UnknownModel, ExitCode.ModelMissing, $"'{a.Id}' is not in the catalog.");
+        if (model.Engine is { } engineId && new EngineRegistry(s).Find(engineId) is null)
+            await new EngineInstaller(s, catalog).InstallAsync(engineId, InstallProgressEvents(a.Id), ct); // one click: engine, then model
         var result = await new ModelInstaller(s, catalog).InstallModelAsync(model, true, InstallProgressEvents(a.Id), ct);
         bridge.Emit("install.progress", new { target = a.Id, stage = "done" });
         return result;
@@ -288,20 +314,92 @@ public sealed class StudioApi(MainWindow window, JobObject job, BridgeHost bridg
         return VoiceBlender.Blend(model, a.Name, a.Parts);
     }
 
-    static object VoicesList()
+    /// <summary>Voices and capabilities of one installed model (default: the configured default model), plus the model list.</summary>
+    static object VoicesList(string? model)
     {
         var s = S();
-        var models = new ModelRegistry(s).List();
-        if (models.Count == 0) return new { model = (string?)null, voices = Array.Empty<VoiceInfo>(), defaultVoice = (string?)null };
-        var m = new ModelRegistry(s).Resolve(null);
+        var registry = new ModelRegistry(s);
+        var models = registry.List();
+        if (models.Count == 0) return new { model = (string?)null, voices = Array.Empty<VoiceInfo>(), defaultVoice = (string?)null, models = Array.Empty<object>() };
+        var m = registry.Resolve(model);
+        var engines = new EngineRegistry(s);
+        string? defaultVoice = s.Settings.DefaultVoice is { } dv && m.HasVoice(dv) ? dv : m.Manifest.DefaultVoice;
+        if (string.IsNullOrEmpty(defaultVoice) || !m.HasVoice(defaultVoice)) defaultVoice = m.Voices.FirstOrDefault().VoiceId;
         return new
         {
             model = m.Reference,
             modelName = m.Manifest.DisplayName,
-            defaultVoice = s.Settings.DefaultVoice ?? m.Manifest.DefaultVoice,
-            capabilities = new { speed = true, minSpeed = NarrationService.MinSpeed, maxSpeed = NarrationService.MaxSpeed, pitch = false, style = false, emotion = false },
-            voices = KokoroVoiceNames.List(m),
+            defaultVoice,
+            capabilities = m.Capabilities,
+            engineReady = m.Manifest.Engine is null || engines.Find(m.Manifest.Engine) is not null,
+            voices = ModelVoices.List(m),
+            models = models.Select(x => new
+            {
+                reference = x.Reference, id = x.Id, displayName = x.Manifest.DisplayName, capabilities = x.Capabilities,
+                isDefault = registry.Resolve(null).Reference == x.Reference,
+                engineReady = x.Manifest.Engine is null || engines.Find(x.Manifest.Engine) is not null,
+            }),
+            consentStatements = VoiceProfiles.ConsentStatements,
         };
+    }
+
+    // Reference recordings are chosen in a native dialog; the page only ever sees an opaque token and the file name.
+    readonly Dictionary<string, string> _referenceTokens = new();
+
+    async Task<object?> ChooseReference()
+    {
+        var path = await Application.Current.Dispatcher.InvokeAsync(() =>
+        {
+            var dlg = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "Choose a recording of the voice (2-60 s of clean speech, WAV)", Filter = "WAV audio (*.wav)|*.wav", CheckFileExists = true,
+            };
+            return dlg.ShowDialog(window) == true ? dlg.FileName : null;
+        });
+        if (path is null) return new { cancelled = true };
+        NoorVox.Core.Audio.WavInfo info;
+        try { info = NoorVox.Core.Audio.WavInfo.Read(path); }
+        catch (InvalidDataException ex) { throw new NoorVoxException(ErrorCodes.InvalidInput, ExitCode.InvalidInput, $"That file isn't a PCM WAV NoorVox can read: {ex.Message}"); }
+        var token = Guid.NewGuid().ToString("N");
+        lock (_referenceTokens) _referenceTokens[token] = path;
+        return new { cancelled = false, token, fileName = Path.GetFileName(path), durationMs = info.DurationMs, sampleRate = info.SampleRate };
+    }
+
+    object VoiceClone(CloneArgs a)
+    {
+        string? path;
+        lock (_referenceTokens) _referenceTokens.TryGetValue(a.ReferenceToken, out path);
+        if (path is null) throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "Choose the reference recording again.");
+        var s = S();
+        var profile = VoiceProfiles.Create(s.ModelsDir, new CreateProfileRequest(a.Name, path, a.Transcript, a.Consent,
+            (a.Language ?? "auto").ToLowerInvariant(), (a.Gender ?? "unknown").ToLowerInvariant()));
+        lock (_referenceTokens) _referenceTokens.Remove(a.ReferenceToken);
+        return new { profile.VoiceId, profile.Name, profile.ReferenceDurationMs, profile.Consent };
+    }
+
+    static object VoiceRemoveProfile(IdArgs a)
+    {
+        VoiceProfiles.Remove(S().ModelsDir, a.Id);
+        return new { voiceId = a.Id, removed = true };
+    }
+
+    async Task<object?> EngineInstall(IdArgs a, CancellationToken ct)
+    {
+        var s = S();
+        var result = await new EngineInstaller(s, ModelCatalog.LoadEmbedded()).InstallAsync(a.Id, InstallProgressEvents(a.Id), ct);
+        bridge.Emit("install.progress", new { target = a.Id, stage = "done" });
+        return result;
+    }
+
+    async Task RecycleIfKokoroAsync()
+    {
+        try
+        {
+            using var sup = Sup(S());
+            var st = await sup.GetStatusAsync(StudioWorker, CancellationToken.None);
+            if (st.LoadedModel is not null && st.Backend == "kokoro-onnx") await sup.RecycleAsync(StudioWorker, CancellationToken.None);
+        }
+        catch (Exception) { /* the next generation loads with the new provider anyway */ }
     }
 
     // ------------------------------------------------------------ workers
@@ -352,7 +450,8 @@ public sealed class StudioApi(MainWindow window, JobObject job, BridgeHost bridg
         var s = S();
         var dir = MainWindow.PreviewDir(s);
         Directory.CreateDirectory(dir);
-        var voice = KokoroVoiceNames.IsValidId(a.Voice) ? a.Voice : throw new NoorVoxException(ErrorCodes.VoiceNotFound, ExitCode.ModelMissing, $"Invalid voice '{a.Voice}'.");
+        var model = new ModelRegistry(s).Resolve(a.Model);
+        var voice = model.HasVoice(a.Voice) ? a.Voice : throw new NoorVoxException(ErrorCodes.VoiceNotFound, ExitCode.ModelMissing, $"Voice '{a.Voice}' is not installed for {model.Reference}.");
         var file = Path.Combine(dir, $"{DateTime.Now:yyyyMMdd_HHmmss}_{voice}_{Guid.NewGuid().ToString("N")[..6]}.wav");
         using var sup = Sup(s);
         var result = await new NarrationService(s, sup).SynthesizeAsync(new NarrationRequest
@@ -360,6 +459,10 @@ public sealed class StudioApi(MainWindow window, JobObject job, BridgeHost bridg
             Text = a.Text,
             VoiceId = voice,
             Speed = a.Speed,
+            Model = model.Reference,
+            Style = a.Style,
+            Seed = a.Seed,
+            Language = string.IsNullOrEmpty(a.Language) ? null : a.Language,
             OutputPath = file,
             WriteManifest = true,
             WorkerId = StudioWorker,

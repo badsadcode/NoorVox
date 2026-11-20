@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { call, errorText, on } from "../bridge";
 import { Download, Folder, Mic, Pause, Play, Spinner, Upload, Wave } from "../components/Icons";
 import { Waveform } from "../components/Waveform";
+import { CloneDialog } from "../components/CloneDialog";
 import { estimateSeconds, fmtClock, fmtDuration, wordCount } from "../format";
 import { useStudio } from "../studio";
 import type { GenerateResponse, Take, VoicesResponse } from "../types";
@@ -9,6 +10,11 @@ import type { GenerateResponse, Take, VoicesResponse } from "../types";
 const DRAFT_KEY = "noorvox.quick.draft";
 const VOICE_KEY = "noorvox.quick.voice";
 const SPEED_KEY = "noorvox.quick.speed";
+const MODEL_KEY = "noorvox.quick.model";
+const STYLE_KEY = "noorvox.quick.style";
+const LANG_KEY = "noorvox.quick.language";
+const KIND_GROUP: Record<string, string> = { clone: "My cloned voices", blend: "My blended voices" };
+const cap = (s: string) => s ? s[0].toUpperCase() + s.slice(1) : s;
 const load = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
 const save = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* storage unavailable */ } };
 const SAMPLE = "It started, as so many terrible ideas do, with a single image.\n\nA window, a Vulkan device, and a triangle. Nothing more. No terrain, no trees, no Alden. Just proof that the engine could draw something on the screen.";
@@ -23,6 +29,13 @@ export function Narrate() {
   const [text, setText] = useState(readDraft);
   const [voiceId, setVoiceId] = useState("");
   const [speed, setSpeed] = useState(() => Number(load(SPEED_KEY)) || 1);
+  const [modelRef, setModelRef] = useState<string | null>(() => load(MODEL_KEY));
+  const [style, setStyle] = useState(() => load(STYLE_KEY) ?? "");
+  const [language, setLanguage] = useState(() => load(LANG_KEY) ?? "auto");
+  const [seedLocked, setSeedLocked] = useState(false);
+  const [seed, setSeed] = useState<number | null>(null);
+  const [cloning, setCloning] = useState(false);
+  const [reloadVoices, setReloadVoices] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [playing, setPlaying] = useState<string | null>(null);
@@ -31,17 +44,25 @@ export function Narrate() {
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    call<VoicesResponse>("voices.list").then((v) => {
+    call<VoicesResponse>("voices.list", { model: modelRef }).then((v) => {
       setVoices(v);
-      const remembered = load(VOICE_KEY);
-      setVoiceId(remembered && v.voices.some((x) => x.id === remembered) ? remembered
-        : info?.settings.defaultVoice ?? v.defaultVoice ?? v.voices[0]?.id ?? "");
-    }, (e) => setError(errorText(e)));
-  }, [info?.settings.defaultVoice]);
+      if (v.model && v.model !== modelRef) setModelRef(v.model);
+      const remembered = load(`${VOICE_KEY}.${v.model}`) ?? load(VOICE_KEY);
+      const pick = (id: string | null | undefined) => (id && v.voices.some((x) => x.id === id) ? id : null);
+      setVoiceId((cur) => pick(cur) ?? pick(remembered) ?? pick(info?.settings.defaultVoice) ?? v.defaultVoice ?? v.voices[0]?.id ?? "");
+    }, (e) => {
+      if (modelRef) { setModelRef(null); return; } // a remembered model that was removed: fall back to the default
+      setError(errorText(e));
+    });
+  }, [info?.settings.defaultVoice, modelRef, reloadVoices]);
 
   useEffect(() => save(DRAFT_KEY, text), [text]);
-  useEffect(() => { if (voiceId) save(VOICE_KEY, voiceId); }, [voiceId]);
+  useEffect(() => { if (voiceId && voices?.model) save(`${VOICE_KEY}.${voices.model}`, voiceId); }, [voiceId, voices?.model]);
   useEffect(() => save(SPEED_KEY, String(speed)), [speed]);
+  useEffect(() => { if (modelRef) save(MODEL_KEY, modelRef); }, [modelRef]);
+  useEffect(() => save(STYLE_KEY, style), [style]);
+  useEffect(() => save(LANG_KEY, language), [language]);
+  const caps = voices?.capabilities;
   useEffect(() => on<{ message: string }>("narration.progress", (d) => setBusy(d.message)), []);
 
   useEffect(() => {
@@ -58,7 +79,7 @@ export function Narrate() {
   const voice = voices?.voices.find((v) => v.id === voiceId);
   const groups = useMemo(() => {
     const m = new Map<string, NonNullable<VoicesResponse["voices"]>>();
-    voices?.voices.forEach((v) => m.set(v.languageName, [...(m.get(v.languageName) ?? []), v]));
+    voices?.voices.forEach((v) => { const g = KIND_GROUP[v.kind] ?? v.languageName; m.set(g, [...(m.get(g) ?? []), v]); });
     return [...m.entries()];
   }, [voices]);
 
@@ -82,7 +103,15 @@ export function Narrate() {
     setError(null);
     setBusy("Preparing…");
     try {
-      const r = await call<GenerateResponse>("narration.generate", { text: spoken, voice: voiceId, speed });
+      // Only send what this model supports (the C# side rejects anything else anyway).
+      const r = await call<GenerateResponse>("narration.generate", {
+        text: spoken, voice: voiceId, model: voices?.model,
+        speed: caps?.speed ? speed : 1,
+        style: caps?.style && style.trim() ? style.trim() : null,
+        seed: caps?.seed && seedLocked && seed != null ? seed : null,
+        language: caps?.languages.length ? language : null,
+      });
+      if (r.result.seed != null && !seedLocked) setSeed(r.result.seed);
       const take: Take = { key: r.result.outputPath, text: spoken, voice, mediaUrl: r.mediaUrl, result: r.result };
       if (!audition) setTakes((t) => [take, ...t]);
       play(take);
@@ -93,7 +122,7 @@ export function Narrate() {
       setBusy(null);
       refreshWorkers();
     }
-  }, [voiceId, speed, busy, voice, play, notify, refreshWorkers]);
+  }, [voiceId, speed, busy, voice, play, notify, refreshWorkers, voices?.model, caps, style, seedLocked, seed, language]);
 
   const exportTake = async (take: Take) => {
     try {
@@ -153,13 +182,23 @@ export function Narrate() {
         <aside className="side stack" aria-label="Voice and generation">
           <section className="panel">
             <h2>Voice &amp; delivery</h2>
-            <div className="voice-card">
+            {(voices?.models?.length ?? 0) > 1 && <>
+              <label className="field" htmlFor="model">Model</label>
+              <select id="model" value={voices?.model ?? ""} onChange={(e) => setModelRef(e.target.value)} disabled={!!busy}>
+                {voices!.models!.map((m) => <option key={m.reference} value={m.reference}>{m.displayName}{m.capabilities.requiresGpu ? " (GPU)" : ""}</option>)}
+              </select>
+            </>}
+            <div className="voice-card" style={{ marginTop: 10 }}>
               <Mic size={22} />
               <div style={{ minWidth: 0 }}>
-                <b>{voice ? voice.displayName : "—"}</b>
-                <span className="muted small">{voice ? `${voice.languageName} · ${voice.gender} · ${voices?.modelName}` : "Loading voices…"}</span>
+                <b>{voice ? voice.displayName : "—"}{voice?.kind === "clone" && <span className="pill accent" style={{ marginLeft: 6 }}>cloned</span>}</b>
+                <span className="muted small">{voice ? `${voice.languageName} · ${voice.gender} · ${voices?.modelName}` : voices?.voices.length === 0 ? "No voices yet" : "Loading voices…"}</span>
+                {voice?.description && <span className="muted small" title={voice.description} style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{voice.description}</span>}
               </div>
             </div>
+            {voices?.engineReady === false && (
+              <p className="note err">This model's engine pack isn't installed. <button className="btn small" onClick={() => go("models")}>Open Models</button></p>
+            )}
             <label className="field" htmlFor="voice">Voice</label>
             <select id="voice" value={voiceId} onChange={(e) => setVoiceId(e.target.value)} disabled={!voices}>
               {groups.map(([lang, vs]) => (
@@ -168,19 +207,58 @@ export function Narrate() {
                 </optgroup>
               ))}
             </select>
-            <button className="btn small" style={{ marginTop: 8 }} disabled={!!busy || !voice}
-              onClick={() => generate(`Hello, I'm ${voice?.displayName}. This is how I sound when I narrate for you.`, true)}>
-              <Wave size={15} /> Audition voice
-            </button>
-
-            <div className="speed-row" style={{ marginTop: 16 }}>
-              <label className="field" htmlFor="speed">Speed</label>
-              <span className="mono">{speed.toFixed(2)}×</span>
+            <div className="row" style={{ marginTop: 8 }}>
+              <button className="btn small" disabled={!!busy || !voice}
+                onClick={() => generate(`Hello, I'm ${voice?.displayName}. This is how I sound when I narrate for you.`, true)}>
+                <Wave size={15} /> Audition voice
+              </button>
+              {caps?.cloning && voices?.consentStatements && (
+                <button className="btn small" onClick={() => setCloning(true)} disabled={!!busy}><Mic size={15} /> Clone a voice…</button>
+              )}
             </div>
-            <input id="speed" type="range" min={voices?.capabilities?.minSpeed ?? 0.5} max={voices?.capabilities?.maxSpeed ?? 2} step={0.05}
-              value={speed} onChange={(e) => setSpeed(Number(e.target.value))} onDoubleClick={() => setSpeed(1)} />
+            {caps?.cloning && voices?.voices.length === 0 && (
+              <p className="note" style={{ marginTop: 10 }}>This model speaks in cloned voices. Create one from a short recording to start.</p>
+            )}
+
+            {caps?.speed && <>
+              <div className="speed-row" style={{ marginTop: 16 }}>
+                <label className="field" htmlFor="speed">Speed</label>
+                <span className="mono">{speed.toFixed(2)}×</span>
+              </div>
+              <input id="speed" type="range" min={caps.minSpeed} max={caps.maxSpeed} step={0.05}
+                value={speed} onChange={(e) => setSpeed(Number(e.target.value))} onDoubleClick={() => setSpeed(1)} />
+            </>}
+
+            {caps?.style && <>
+              <label className="field" htmlFor="style" style={{ marginTop: 14 }}>Style directions</label>
+              <textarea id="style" rows={2} maxLength={500} value={style} onChange={(e) => setStyle(e.target.value)}
+                placeholder="e.g. Calm, warm documentary narration with a hint of humour. Speak slowly." />
+            </>}
+
+            {!!caps?.languages.length && <>
+              <label className="field" htmlFor="language" style={{ marginTop: 12 }}>Language</label>
+              <select id="language" value={language} onChange={(e) => setLanguage(e.target.value)}>
+                {caps.languages.map((l) => <option key={l} value={l}>{l === "auto" ? "Detect from text" : cap(l)}</option>)}
+              </select>
+            </>}
+
+            {caps?.seed && (
+              <div className="row" style={{ marginTop: 12, alignItems: "center" }}>
+                <label className="radio" title="The same seed, text and settings give the same take on this PC.">
+                  <input type="checkbox" checked={seedLocked} onChange={(e) => setSeedLocked(e.target.checked)} /> Keep seed
+                </label>
+                <input aria-label="Seed" className="mono" style={{ width: 130 }} inputMode="numeric" value={seed ?? ""} placeholder="random"
+                  onChange={(e) => { const n = Number(e.target.value.replace(/\D/g, "")); setSeed(e.target.value === "" ? null : n); setSeedLocked(e.target.value !== ""); }} />
+              </div>
+            )}
+
             <p className="note" style={{ marginTop: 12 }}>
-              Kokoro offers voice and speed. Pitch, emotion and style aren't controls in this model, so NoorVox doesn't pretend they are.
+              {caps == null ? "Loading…"
+                : caps.speed && !caps.style ? "This model offers voice and speed. Pitch, emotion and style aren't controls in it, so NoorVox doesn't pretend they are."
+                : caps.style ? "Qwen follows written directions instead of sliders: describe the pace, mood and delivery. It has no speed control."
+                : caps.cloning ? "This model has no speed or style controls; the voice comes from the recording."
+                : "This model has no speed or style controls."}
+              {caps?.requiresGpu && " Runs on your NVIDIA GPU."}
             </p>
           </section>
 
@@ -194,6 +272,10 @@ export function Narrate() {
           </section>
         </aside>
       </div>
+      {cloning && voices?.consentStatements && (
+        <CloneDialog consent={voices.consentStatements} onClose={() => setCloning(false)}
+          onCreated={(id) => { setCloning(false); setVoiceId(id); setReloadVoices((n) => n + 1); notify("Voice created. It's ready to use."); }} />
+      )}
 
       <section className="takes" aria-label="Takes">
         <div className="page-head" style={{ marginBottom: 10 }}>
@@ -211,7 +293,13 @@ export function Narrate() {
               <Waveform url={t.mediaUrl} progress={progress[t.key] ?? 0} label="Seek" onSeek={(f) => play(t, f)} />
               <div className="take-meta">
                 <span><b style={{ color: "var(--text)" }}>{fmtDuration(t.result.durationMs)}</b> measured</span>
-                <span>{t.voice?.displayName ?? t.result.voice} · {t.result.speed.toFixed(2)}×</span>
+                <span>{t.voice?.displayName ?? t.result.voice}{t.result.voiceKind === "clone" ? " (cloned)" : ""} · {t.result.speed.toFixed(2)}×</span>
+                {t.result.style && <span title={t.result.style}>style: “{t.result.style.length > 40 ? t.result.style.slice(0, 40) + "…" : t.result.style}”</span>}
+                {t.result.seed != null && (
+                  <button className="linkish mono" title="Use this seed for the next take" onClick={() => { setSeed(t.result.seed!); setSeedLocked(true); }}>
+                    seed {t.result.seed}
+                  </button>
+                )}
                 <span>{t.result.sampleRate / 1000} kHz · {t.result.bitsPerSample}-bit mono</span>
                 <span>generated in {(t.result.timings.synthesisMs / 1000).toFixed(1)} s ({t.result.backend.executionProvider})</span>
                 {t.exportedPath && <span className="pill ok">Exported</span>}

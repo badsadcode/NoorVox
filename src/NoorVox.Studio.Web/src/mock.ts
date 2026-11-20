@@ -10,8 +10,22 @@ const voices = [
   ["bm_fable", "en-gb", "British English", "male"], ["jf_alpha", "ja", "Japanese", "female"],
   ["ff_siwis", "fr", "French", "female"], ["if_sara", "it", "Italian", "female"],
 ].map(([id, language, languageName, gender]) => ({
-  id, language, languageName, gender, displayName: id.split("_")[1].replace(/^./, (c) => c.toUpperCase()), packId: "kokoro-82m-v1.0-voices",
+  id, language, languageName, gender, displayName: id.split("_")[1].replace(/^./, (c) => c.toUpperCase()), packId: "kokoro-82m-v1.0-voices", kind: "pack",
 }));
+
+const KOKORO_CAPS = { speed: true, minSpeed: 0.5, maxSpeed: 2, style: false, cloning: false, blending: true, seed: false, requiresGpu: false, languages: [] as string[] };
+const QWEN_LANGS = ["auto", "english", "chinese", "japanese", "korean", "german", "french", "russian", "portuguese", "spanish", "italian"];
+const QWEN_CAPS = { speed: false, minSpeed: 1, maxSpeed: 1, style: true, cloning: false, blending: false, seed: true, requiresGpu: true, languages: QWEN_LANGS };
+const qwenVoices = [["aiden", "Aiden", "male", "english"], ["ryan", "Ryan", "male", "english"], ["vivian", "Vivian", "female", "chinese"], ["ono_anna", "Ono Anna", "female", "japanese"]]
+  .map(([id, displayName, gender, language]) => ({ id, displayName, gender, language, languageName: language[0].toUpperCase() + language.slice(1), packId: "built-in", kind: "built-in",
+    description: "Mock built-in Qwen speaker." }));
+const models = [
+  { reference: "kokoro-82m@1.0", id: "kokoro-82m", displayName: "Kokoro 82M v1.0", capabilities: KOKORO_CAPS, isDefault: true, engineReady: true },
+  { reference: "qwen3-tts-1.7b-customvoice@1.0", id: "qwen3-tts-1.7b-customvoice", displayName: "Qwen3-TTS 1.7B CustomVoice", capabilities: QWEN_CAPS, isDefault: false, engineReady: true },
+  { reference: "qwen3-tts-1.7b-base@1.0", id: "qwen3-tts-1.7b-base", displayName: "Qwen3-TTS 1.7B Base (voice cloning)", capabilities: { ...QWEN_CAPS, style: false, cloning: true }, isDefault: false, engineReady: true },
+];
+const consentStatements = { "own-voice": "This recording is my own voice.", "speaker-permission": "I have the speaker's permission to create and use a synthetic copy of their voice." };
+let kokoroProvider = "cpu";
 
 let theme = "nocturne";
 let stopOnExit = true;
@@ -40,19 +54,33 @@ export async function mockCall(method: string, p: Record<string, any>): Promise<
   switch (method) {
     case "app.info":
       return { version: "0.1.0-dev (mock)", processorCount: 16, firstRun: false, hasModel: true,
-        settings: { theme, stopOnExit, idleTimeoutSeconds: idle, defaultVoice: null },
+        settings: { theme, stopOnExit, idleTimeoutSeconds: idle, defaultVoice: null, kokoroProvider },
         home: { path: "X:\\Mock\\NoorVox", mode: "default", settingsFile: "X:\\Mock\\NoorVox\\settings.json" },
         workerExecutable: { path: "X:\\Mock\\NoorVox.Worker.exe", exists: true } };
     case "storage.get":
       return { home: "X:\\Mock", settingsFile: "X:\\Mock\\settings.json", paths: ["models", "cache", "temp", "projects", "exports", "webview"].map((kind) => ({
         kind, path: `X:\\Mock\\NoorVox\\${kind[0].toUpperCase()}${kind.slice(1)}`, source: "configured", drive: "X:\\", exists: true, freeBytes: 1.3e12 })) };
     case "voices.list":
-      return { model: "kokoro-82m@1.0", modelName: "Kokoro 82M v1.0", defaultVoice: "af_heart",
-        capabilities: { speed: true, minSpeed: 0.5, maxSpeed: 2, pitch: false, style: false, emotion: false }, voices };
+      if (p.model?.startsWith("qwen3-tts-1.7b-base"))
+        return { model: models[2].reference, modelName: models[2].displayName, defaultVoice: null, capabilities: models[2].capabilities, engineReady: true, voices: [], models, consentStatements };
+      return p.model?.startsWith("qwen")
+        ? { model: models[1].reference, modelName: models[1].displayName, defaultVoice: "aiden", capabilities: QWEN_CAPS, engineReady: true, voices: qwenVoices, models, consentStatements }
+        : { model: models[0].reference, modelName: models[0].displayName, defaultVoice: "af_heart", capabilities: KOKORO_CAPS, engineReady: true, voices, models, consentStatements };
+    case "voices.chooseReference":
+      return { cancelled: false, token: "mock-token", fileName: "my-voice.wav", durationMs: 9400, sampleRate: 48000 };
+    case "engines.list":
+      return { engines: [
+        { id: "qwen-tts", version: "1.0", displayName: "Qwen3-TTS engine (PyTorch + CUDA)", description: "Mock engine pack.", kind: "python", state: "installed",
+          path: "X:\\Mock\\Models\\engines\\qwen-tts\\1.0", approxInstallBytes: 6e9, license: "mixed", source: "mock", requires: [], usedBy: ["qwen3-tts-1.7b-customvoice"],
+          verified: { torch: "2.11.0+cu128", cuda: true, cudaVersion: "12.8", device: "Mock GPU" } },
+        { id: "onnxruntime-cuda", version: "1.22.0", displayName: "ONNX Runtime CUDA provider (Kokoro on GPU)", description: "Mock.", kind: "native", state: "notInstalled",
+          path: "X:\\Mock\\Models\\engines\\onnxruntime-cuda\\1.22.0", approxInstallBytes: 0, license: "MIT", source: "mock", requires: ["qwen-tts"], usedBy: ["kokoro-82m (GPU option)"], verified: null },
+      ] };
     case "settings.set":
       if (p.theme) theme = p.theme;
       if (p.stopOnExit !== undefined) stopOnExit = p.stopOnExit;
       if (p.idleTimeoutSeconds !== undefined) idle = p.idleTimeoutSeconds;
+      if (p.kokoroProvider) kokoroProvider = p.kokoroProvider;
       return mockCall("app.info", {});
     case "workers.list":
       if (worker) { cpu += worker.state === "generating" ? 900 : 5; worker = { ...worker, uptimeSeconds: (worker.uptimeSeconds ?? 0) + 2,
@@ -73,7 +101,7 @@ export async function mockCall(method: string, p: Record<string, any>): Promise<
       if (!worker) await mockCall("workers.start", {});
       emitLocal("narration.progress", { message: "Synthesizing…" });
       worker = { ...worker!, state: "generating", currentJob: { requestId: "r1", kind: "synthesize", startedAt: new Date().toISOString(), textChars: p.text.length, voiceId: p.voice } };
-      const secs = Math.max(1.2, p.text.length / 15 / p.speed);
+      const secs = Math.max(1.2, p.text.length / 15 / (p.speed || 1));
       await delay(900);
       worker = { ...worker!, state: "ready", currentJob: undefined, jobsCompleted: (worker!.jobsCompleted ?? 0) + 1 };
       return { mediaUrl: wav(secs), result: { outputPath: `X:\\Mock\\Temp\\studio\\previews\\${Date.now()}_${p.voice}.wav`, durationMs: Math.round(secs * 1000), durationSeconds: secs,
@@ -81,7 +109,8 @@ export async function mockCall(method: string, p: Record<string, any>): Promise<
         text: { chars: p.text.length, sha256: "mock" }, voice: p.voice, speed: p.speed,
         model: { id: "kokoro-82m", version: "1.0", modelSha256: "0cfd5e79…", license: "Apache-2.0" }, backend: { id: "kokoro-onnx", executionProvider: "CPU" },
         worker: { id: "studio", reused: true, startedForRequest: false, stoppedAfter: false, stateAfter: "ready" },
-        timings: { synthesisMs: 900, totalMs: 1010, realTimeFactor: 0.17 }, createdAt: new Date().toISOString(), generator: "NoorVox mock" } };
+        timings: { synthesisMs: 900, totalMs: 1010, realTimeFactor: 0.17 }, createdAt: new Date().toISOString(), generator: "NoorVox mock",
+        style: p.style ?? null, seed: p.model?.startsWith("qwen") ? (p.seed ?? Math.floor(Math.random() * 2 ** 31)) : null, voiceKind: "pack" } };
     }
     case "narration.export":
       return { cancelled: false, path: "X:\\Mock\\Exports\\narration.wav", manifestPath: "X:\\Mock\\Exports\\narration.noorvox.json" };
@@ -90,10 +119,14 @@ export async function mockCall(method: string, p: Record<string, any>): Promise<
         installed: [{ id: "kokoro-82m", version: "1.0", reference: "kokoro-82m@1.0", displayName: "Kokoro 82M v1.0", license: "Apache-2.0",
           licenseUrl: "https://huggingface.co/hexgrad/Kokoro-82M", source: "https://github.com/Lyrcaxis/KokoroSharpBinaries/releases/tag/v2.0.0", origin: "download",
           installedAt: new Date().toISOString(), path: "X:\\Mock\\Models\\kokoro-82m\\1.0", modelSha256: "0cfd5e79aab70a3d8c1a57dc639835110ddb32c9f5ff4fdd1f4db202ea43bb05",
-          sizeBytes: 354e6, voices: 54, voicePacks: [{ id: "kokoro-82m-v1.0-voices", version: "1.0", displayName: "Kokoro v1.0 standard voices",
+          sizeBytes: 354e6, voices: 54, capabilities: KOKORO_CAPS, engine: null, backend: "kokoro-onnx", customVoices: [], voicePacks: [{ id: "kokoro-82m-v1.0-voices", version: "1.0", displayName: "Kokoro v1.0 standard voices",
             description: "All 54 official Kokoro v1.0 voices.", voices: 54, downloadBytes: 65.8e6, license: "Apache-2.0", installed: true }] }],
         catalog: [{ id: "kokoro-82m", version: "1.0", displayName: "Kokoro 82M v1.0", description: "Recommended. Natural English narration plus 8 other languages. Runs well on CPU.",
-          recommended: true, license: "Apache-2.0", licenseUrl: "https://huggingface.co/hexgrad/Kokoro-82M", downloadBytes: 391e6, installed: true, updateAvailable: false }] };
+          recommended: true, license: "Apache-2.0", licenseUrl: "https://huggingface.co/hexgrad/Kokoro-82M", downloadBytes: 391e6, installed: true, updateAvailable: false,
+          capabilities: KOKORO_CAPS, engine: null, minVramGb: null, family: "kokoro", engineInstalled: true, engineBytes: 0 },
+          { id: "qwen3-tts-1.7b-base", version: "1.0", displayName: "Qwen3-TTS 1.7B Base (voice cloning)", description: "Mock: speaks in a voice cloned from a short recording.",
+          recommended: false, license: "Apache-2.0", licenseUrl: "https://huggingface.co/Qwen", downloadBytes: 4.5e9, installed: false, updateAvailable: false,
+          capabilities: { ...QWEN_CAPS, style: false, cloning: true }, engine: "qwen-tts", minVramGb: 6, family: "qwen3-tts", engineInstalled: false, engineBytes: 6e9 }] };
     case "models.install": case "voices.installPack": case "models.verify":
       for (let i = 0; i <= 10; i++) { emitLocal("install.progress", { target: p.id, stage: "downloading", item: p.id, file: "kokoro.onnx", done: i * 32e6, total: 320e6 }); await delay(150); }
       emitLocal("install.progress", { target: p.id, stage: "done" });

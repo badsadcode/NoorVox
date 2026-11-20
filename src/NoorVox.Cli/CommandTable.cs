@@ -27,9 +27,17 @@ public static class CommandTable
         new(["diagnostics", "bundle"], "Write a support zip: versions, settings, storage audit, models, workers, recent logs. Never scripts or audio.",
             "noorvox diagnostics bundle [--out FILE.zip] [--json]", ["out"], Commands.DiagnosticsBundle),
 
-        new(["models", "list"], "List installed models and catalog models (with update status).", "noorvox models list [--json]", [], Commands.ModelsList),
-        new(["models", "install"], "Download, verify and install a catalog model (plus its default voice packs).",
-            "noorvox models install <id[@version]> [--no-voices] [--json]", ["no-voices"], Commands.ModelsInstall),
+        new(["models", "list"], "List installed and catalog models with capabilities (speed, style, cloning, seed, GPU) and update status.", "noorvox models list [--json]", [], Commands.ModelsList),
+        new(["models", "install"], "Download, verify and install a catalog model (plus its default voice packs and the engine pack it needs).",
+            "noorvox models install <id[@version]> [--no-voices] [--no-engine] [--json]", ["no-voices", "no-engine"], Commands.ModelsInstall),
+
+        new(["engines", "list"], "List engine packs (Qwen3-TTS runtime, ONNX Runtime CUDA) and whether they are installed.", "noorvox engines list [--json]", [], EngineCommands.List),
+        new(["engines", "install"], "Install an engine pack: verified downloads, hash-locked Python packages, resumable.",
+            "noorvox engines install <qwen-tts|onnxruntime-cuda> [--json]", [], EngineCommands.Install),
+        new(["engines", "remove"], "Delete an installed engine pack (models and voices stay).", "noorvox engines remove <id> [--json]", [], EngineCommands.Remove),
+        new(["gpu", "status"], "Kokoro's provider setting and the GPU the Qwen engine detected at install.", "noorvox gpu status [--json]", [], EngineCommands.GpuStatus),
+        new(["gpu", "set"], "Run Kokoro on cpu (default) or cuda (needs the onnxruntime-cuda and qwen-tts engines; falls back to CPU).",
+            "noorvox gpu set --kokoro cpu|cuda [--json]", ["kokoro"], EngineCommands.GpuSet),
         new(["models", "update"], "Install newer catalog versions of installed models (side by side). --check only reports.",
             "noorvox models update [--check] [--json]", ["check"], Commands.ModelsUpdate),
         new(["models", "import"], "Import a model folder already on disk; identity verified by catalog hashes.",
@@ -42,6 +50,11 @@ public static class CommandTable
         new(["voices", "packs"], "List voice packs available/installed for a model.", "noorvox voices packs [--model REF] [--json]", ["model"], Commands.VoicesPacks),
         new(["voices", "blend"], "Create a new voice as a weighted mix of 2–4 installed voices (saved, hashed, immutable).",
             "noorvox voices blend --name NAME --mix ID:WEIGHT,ID:WEIGHT[,…] [--model REF] [--json]", ["name", "mix", "model"], Commands.VoicesBlend),
+        new(["voices", "clone"], "Create a cloned voice profile from a 2-60 s WAV and its transcript. Requires --consent own-voice|speaker-permission.",
+            "noorvox voices clone --name NAME --reference FILE.wav (--transcript TEXT | --transcript-file FILE) --consent own-voice|speaker-permission [--language auto|english|…] [--gender female|male] [--json]",
+            ["name", "reference", "transcript", "transcript-file", "consent", "language", "gender"], EngineCommands.Clone),
+        new(["voices", "remove-profile"], "Delete a cloned voice profile (its reference copy and consent record). Takes made with it stay.",
+            "noorvox voices remove-profile --voice ID [--json]", ["voice"], EngineCommands.ProfileRemove),
         new(["voices", "install"], "Download and install a voice pack into an installed model.",
             "noorvox voices install <pack-id[@version]> [--model REF] [--json]", ["model"], Commands.VoicesInstall),
 
@@ -75,8 +88,8 @@ public static class CommandTable
             "noorvox pronunciation set --project DIR --match WORD --replace TEXT [--case-sensitive] [--partial] [--json]",
             ["project", "match", "replace", "case-sensitive", "partial"], ProjectCommands.PronunciationSet),
         new(["pronunciation", "remove"], "Remove the rule for a word.", "noorvox pronunciation remove --project DIR --match WORD [--json]", ["project", "match"], ProjectCommands.PronunciationRemove),
-        new(["projects", "cast"], "Set the project's default voice, or a speaker's voice (--speaker).",
-            "noorvox projects cast --project DIR [--speaker ID] --voice ID [--speed X] [--json]", ["project", "speaker", "voice", "speed"], ProjectCommands.Cast),
+        new(["projects", "cast"], "Set the project's default voice (and model), or a speaker's voice (--speaker), with optional speed or style.",
+            "noorvox projects cast --project DIR [--speaker ID] --voice ID [--speed X] [--style TEXT] [--model REF] [--json]", ["project", "speaker", "voice", "speed", "style", "model"], ProjectCommands.Cast),
 
         new(["generate"], "Generate takes for a project, section, scene or segments as a resumable job. --approve approves new takes where none is approved.",
             "noorvox generate --project DIR [--section ID] [--scene ID] [--segment ID[,ID…]] [--policy missing|all] [--approve] [--worker ID] [--keep-worker] [--json]",
@@ -101,8 +114,8 @@ public static class CommandTable
             ["project", "section", "rate", "normalize", "peak-dbfs", "no-subtitles", "out", "allow-missing", "overwrite"], ProjectCommands.Assemble),
 
         new(["synth"], "Synthesize text to a WAV file and report measured duration and provenance.",
-            "noorvox synth (--text TEXT | --text-file FILE | --stdin) [--out FILE.wav] [--voice ID] [--speed X] [--model REF] [--worker ID] [--keep-worker] [--overwrite] [--manifest] [--json]",
-            ["text", "text-file", "stdin", "out", "voice", "speed", "model", "worker", "keep-worker", "overwrite", "manifest"], Commands.Synth),
+            "noorvox synth (--text TEXT | --text-file FILE | --stdin) [--out FILE.wav] [--voice ID] [--speed X] [--style TEXT] [--seed N] [--language NAME] [--model REF] [--worker ID] [--keep-worker] [--overwrite] [--manifest] [--json]",
+            ["text", "text-file", "stdin", "out", "voice", "speed", "style", "seed", "language", "model", "worker", "keep-worker", "overwrite", "manifest"], Commands.Synth),
     ];
 
     public static (CommandDef? Command, List<string> Remaining) Match(List<string> words)
@@ -130,7 +143,7 @@ public static class CommandTable
         var sb = new StringBuilder();
         if (command is null)
         {
-            sb.AppendLine($"NoorVox {NoorVoxInfo.Version} — local voiceover CLI (offline Kokoro TTS).");
+            sb.AppendLine($"NoorVox {NoorVoxInfo.Version} — local voiceover CLI (offline Kokoro and Qwen3-TTS).");
             if (words.Count > 0 && !All.Any(c => c.Path[0].Equals(words[0], StringComparison.OrdinalIgnoreCase)))
                 sb.AppendLine($"Unknown command: {string.Join(' ', words)}");
             sb.AppendLine();

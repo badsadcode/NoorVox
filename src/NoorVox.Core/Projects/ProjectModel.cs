@@ -49,6 +49,8 @@ public sealed class ProjectDefaults
     public string? Model { get; set; }
     public string? VoiceId { get; set; }
     public double Speed { get; set; } = 1.0;
+    /// <summary>Delivery directions for models that take them (Qwen CustomVoice 1.7B). Optional, additive in schema 1.</summary>
+    public string? Style { get; set; }
 }
 
 /// <summary>Structured pauses in milliseconds (spec §6.2) — used by export assembly (Phase 4), stored now.</summary>
@@ -66,6 +68,7 @@ public sealed class Speaker
     public string Name { get; set; } = "";
     public string? VoiceId { get; set; }
     public double? Speed { get; set; }
+    public string? Style { get; set; }
 }
 
 public sealed class SectionRef
@@ -100,6 +103,8 @@ public sealed class Segment
     public string? SpeakerId { get; set; }
     public string? VoiceId { get; set; }
     public double? Speed { get; set; }
+    /// <summary>Overrides the speaker's/project's style for this line ("whispering", "angry"); empty string = no style.</summary>
+    public string? Style { get; set; }
     public int? PauseBeforeMs { get; set; }
     public int? PauseAfterMs { get; set; }
     /// <summary>Editorial notes — never spoken.</summary>
@@ -121,6 +126,9 @@ public sealed class TakeRecord
     public string SourceTextSha256 { get; set; } = "";
     public string VoiceId { get; set; } = "";
     public double Speed { get; set; }
+    public string? Style { get; set; }
+    /// <summary>Sampling seed (Qwen): the same seed, text, settings, GPU and engine reproduce this take.</summary>
+    public long? Seed { get; set; }
     public string ModelId { get; set; } = "";
     public string ModelVersion { get; set; } = "";
     public string ModelSha256 { get; set; } = "";

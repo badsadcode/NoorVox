@@ -95,16 +95,17 @@ function NewProject({ onClose }: { onClose: () => void }) {
   const [title, setTitle] = useState("");
   const [kind, setKind] = useState("documentary");
   const [voice, setVoice] = useState("");
+  const [model, setModel] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  useEffect(() => { call<ProjectKind[]>("projects.kinds").then(setKinds, () => undefined); }, []);
   useEffect(() => {
-    call<ProjectKind[]>("projects.kinds").then(setKinds, () => undefined);
-    call<VoicesResponse>("voices.list").then((v) => { setVoices(v); setVoice(v.defaultVoice ?? ""); }, () => undefined);
-  }, []);
+    call<VoicesResponse>("voices.list", { model }).then((v) => { setVoices(v); setVoice(v.defaultVoice ?? ""); }, () => undefined);
+  }, [model]);
 
   const create = async () => {
     setBusy(true);
     try {
-      const r = await call<{ cancelled: boolean; path?: string }>("projects.create", { title, kind, voice: voice || null });
+      const r = await call<{ cancelled: boolean; path?: string }>("projects.create", { title, kind, voice: voice || null, model: voices?.model ?? null });
       if (!r.cancelled && r.path) { notify(`Created “${title}”.`); openProject(r.path); }
     } catch (e) { notify(errorText(e), true); } finally { setBusy(false); }
   };
@@ -130,6 +131,14 @@ function NewProject({ onClose }: { onClose: () => void }) {
           ))}
         </div>
       </div>
+      {(voices?.models?.length ?? 0) > 1 && (
+        <div style={{ maxWidth: 360 }}>
+          <label className="field" htmlFor="pmodel">Voice model</label>
+          <select id="pmodel" value={voices?.model ?? ""} onChange={(e) => setModel(e.target.value)}>
+            {voices!.models!.map((m) => <option key={m.reference} value={m.reference}>{m.displayName}{m.capabilities.requiresGpu ? " (GPU)" : ""}</option>)}
+          </select>
+        </div>
+      )}
       <div style={{ maxWidth: 360 }}>
         <label className="field" htmlFor="pvoice">{kinds.find((k) => k.id === kind)?.usesSpeakers ? "Default voice (characters can be cast later)" : "Narrator voice"}</label>
         <select id="pvoice" value={voice} onChange={(e) => setVoice(e.target.value)}>

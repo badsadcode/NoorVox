@@ -43,9 +43,7 @@ public sealed class ModelInstaller(StorageContext storage, ModelCatalog catalog,
             EnsureSpace(model);
             downloaded = await FetchAndPlaceAsync(model, dir, progress, ct);
             var manifest = ToManifest(model, "model", origin: "download");
-            manifest.Backend = model.Backend;
-            manifest.DefaultVoice = model.DefaultVoice;
-            manifest.SampleRate = model.SampleRate;
+            ApplyModelFields(manifest, model);
             FileUtil.WriteAllTextAtomic(manifestPath, Json.Serialize(manifest));
             status = "installed";
         }
@@ -111,9 +109,7 @@ public sealed class ModelInstaller(StorageContext storage, ModelCatalog catalog,
                 CopyVerified(f, Path.Combine(dir, modelFile.Path), modelFile);
                 var manifest = ToManifest(model, "model", origin: "import");
                 manifest.ImportedFrom = sourceDir;
-                manifest.Backend = model.Backend;
-                manifest.DefaultVoice = model.DefaultVoice;
-                manifest.SampleRate = model.SampleRate;
+                ApplyModelFields(manifest, model);
                 FileUtil.WriteAllTextAtomic(Path.Combine(dir, ModelRegistry.ModelManifestName), Json.Serialize(manifest));
                 break;
             }
@@ -171,6 +167,17 @@ public sealed class ModelInstaller(StorageContext storage, ModelCatalog catalog,
         File.Move(tmp, destination, overwrite: true);
     }
 
+    /// <summary>Everything a model manifest carries beyond the common package fields (read by the worker and the UI).</summary>
+    static void ApplyModelFields(PackageManifest manifest, CatalogModel model)
+    {
+        manifest.Backend = model.Backend;
+        manifest.DefaultVoice = string.IsNullOrEmpty(model.DefaultVoice) ? null : model.DefaultVoice;
+        manifest.SampleRate = model.SampleRate;
+        manifest.Capabilities = model.Capabilities;
+        manifest.BuiltInVoices = model.BuiltInVoices;
+        manifest.Engine = model.Engine;
+    }
+
     PackageManifest ToManifest(ICatalogItem item, string kind, string origin) => new()
     {
         Kind = kind,
@@ -186,9 +193,9 @@ public sealed class ModelInstaller(StorageContext storage, ModelCatalog catalog,
         Files = item.Files,
     };
 
-    void EnsureSpace(ICatalogItem item)
+    internal void EnsureSpace(ICatalogItem item, long extraBytes = 0)
     {
-        long need = item.Downloads.Sum(d => d.Size) + item.Files.Sum(f => f.Size);
+        long need = item.Downloads.Sum(d => d.Size) + item.Files.Sum(f => f.Size) + extraBytes;
         foreach (var dir in new[] { storage.CacheDir, storage.ModelsDir }.Distinct())
         {
             var free = FileUtil.FreeBytes(dir);
@@ -200,27 +207,40 @@ public sealed class ModelInstaller(StorageContext storage, ModelCatalog catalog,
     }
 
     /// <summary>Downloads every source of <paramref name="item"/>, verifies, and places its files in <paramref name="packageDir"/>.</summary>
-    async Task<long> FetchAndPlaceAsync(ICatalogItem item, string packageDir, IProgress<InstallProgress>? progress, CancellationToken ct)
+    internal async Task<long> FetchAndPlaceAsync(ICatalogItem item, string packageDir, IProgress<InstallProgress>? progress, CancellationToken ct)
     {
         var staging = Path.Combine(storage.CacheDir, "staging", $"{item.Id}-{item.Version}");
         Directory.CreateDirectory(staging);
         long downloaded = 0;
         var wanted = item.Files.ToDictionary(f => f.Path, StringComparer.Ordinal);
-        var assembled = Path.Combine(staging, "assembled");
-        if (Directory.Exists(assembled)) Directory.Delete(assembled, recursive: true);
+        var assembled = Path.Combine(staging, "assembled"); // kept across attempts: verified files are not fetched twice
         Directory.CreateDirectory(assembled);
 
         foreach (var d in item.Downloads)
         {
             var name = Path.GetFileName(new Uri(d.Url).AbsolutePath);
+            if (d.Kind == "file")
+            {
+                // Multi-file models (Qwen) have several files with the same name in different folders: stage by target path.
+                var placed = Path.Combine(assembled, d.Target);
+                Directory.CreateDirectory(Path.GetDirectoryName(placed)!);
+                if (wanted.TryGetValue(d.Target, out var pf))
+                {
+                    // Already staged by an earlier attempt, or already in the package folder: verify instead of downloading again.
+                    if (IsVerified(placed, pf, item.Id, progress)) continue;
+                    var existing = Path.Combine(packageDir, d.Target);
+                    if (IsVerified(existing, pf, item.Id, progress)) { File.Move(existing, placed, overwrite: true); continue; }
+                }
+                var fileLocal = Path.Combine(staging, "files", d.Target);
+                Directory.CreateDirectory(Path.GetDirectoryName(fileLocal)!);
+                downloaded += await DownloadVerifiedAsync(item.Id, d, fileLocal, progress, ct);
+                File.Move(fileLocal, placed, overwrite: true);
+                continue;
+            }
             var local = Path.Combine(staging, name);
             downloaded += await DownloadVerifiedAsync(item.Id, d, local, progress, ct);
             progress?.Report(new InstallProgress("unpacking", item.Id, name, 0, 0));
-            if (d.Kind == "file")
-            {
-                File.Move(local, Path.Combine(assembled, d.Target), overwrite: true);
-            }
-            else if (d.Kind == "zip")
+            if (d.Kind == "zip")
             {
                 using (var zip = ZipFile.OpenRead(local))
                 {
@@ -254,8 +274,15 @@ public sealed class ModelInstaller(StorageContext storage, ModelCatalog catalog,
         return downloaded;
     }
 
+    static bool IsVerified(string path, PackageFile expected, string item, IProgress<InstallProgress>? progress)
+    {
+        if (!File.Exists(path) || new FileInfo(path).Length != expected.Size) return false;
+        progress?.Report(new InstallProgress("verifying", item, expected.Path, 0, expected.Size));
+        return FileUtil.Sha256File(path).Equals(expected.Sha256, StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>Resumable download (HTTP Range) into <c>*.part</c>, then size + sha256 check. Returns bytes transferred.</summary>
-    async Task<long> DownloadVerifiedAsync(string item, CatalogDownload d, string finalPath, IProgress<InstallProgress>? progress, CancellationToken ct)
+    internal async Task<long> DownloadVerifiedAsync(string item, CatalogDownload d, string finalPath, IProgress<InstallProgress>? progress, CancellationToken ct)
     {
         var name = Path.GetFileName(finalPath);
         if (File.Exists(finalPath) && new FileInfo(finalPath).Length == d.Size && FileUtil.Sha256File(finalPath) == d.Sha256) return 0;

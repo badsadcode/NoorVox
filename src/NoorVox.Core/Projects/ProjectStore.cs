@@ -7,7 +7,7 @@ using NoorVox.Core.Util;
 namespace NoorVox.Core.Projects;
 
 /// <summary>What will actually be synthesized for a segment, after speaker/default fallbacks and pronunciation.</summary>
-public sealed record EffectiveSegment(string SpokenText, string VoiceId, double Speed, string CacheKey);
+public sealed record EffectiveSegment(string SpokenText, string VoiceId, double Speed, string CacheKey, string? Style = null);
 
 public sealed record SegmentLocation(SectionRef Section, SectionFile File, Scene Scene, Segment Segment, int IndexInProject);
 
@@ -403,14 +403,19 @@ public sealed partial class ProjectStore
         var speaker = seg.SpeakerId is null ? null : Project.Speakers.FirstOrDefault(s => s.SpeakerId == seg.SpeakerId);
         var voice = seg.VoiceId ?? speaker?.VoiceId ?? Project.Defaults.VoiceId ?? model.Manifest.DefaultVoice ?? "af_heart";
         var speed = seg.Speed ?? speaker?.Speed ?? Project.Defaults.Speed;
+        // Style applies only where the model takes it; an empty segment style switches an inherited one off.
+        var style = model.Capabilities.Style ? seg.Style ?? speaker?.Style ?? Project.Defaults.Style : null;
+        style = string.IsNullOrWhiteSpace(style) ? null : style.Trim();
         var spoken = (pron ?? Pronunciation()).Apply(seg.Text);
-        var key = CacheKey(spoken, voice, speed, model);
-        return new EffectiveSegment(spoken, voice, speed, key);
+        var key = CacheKey(spoken, voice, speed, model, style);
+        return new EffectiveSegment(spoken, voice, speed, key, style);
     }
 
-    public static string CacheKey(string spokenText, string voice, double speed, InstalledModel model)
+    public static string CacheKey(string spokenText, string voice, double speed, InstalledModel model, string? style = null)
     {
-        var material = $"v1\n{spokenText}\n{voice}\n{speed.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)}\n{model.ModelSha256}\n{model.Manifest.Backend}";
+        // Style is appended only when present, so takes made before 0.3 keep their cache keys.
+        var material = $"v1\n{spokenText}\n{voice}\n{speed.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)}\n{model.ModelSha256}\n{model.Manifest.Backend}"
+            + (style is null ? "" : $"\nstyle:{style}");
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(material)));
     }
 
