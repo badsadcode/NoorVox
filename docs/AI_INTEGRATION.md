@@ -7,6 +7,8 @@ as one script.
 > NoorVox speaks text; it does **not** write or fact-check the script. Another agent (or a human) prepares and approves the text.
 > Don't add claims to narration that the source material doesn't support.
 
+> **Whole job ("read these files, make a voiceover and a video")?** Follow [agent-briefs/VOICEOVER_AND_VIDEO.md](agent-briefs/VOICEOVER_AND_VIDEO.md).
+
 ## Golden rules
 
 1. Always pass `--json`, parse stdout as a single JSON object, and branch on the **exit code** and `code`, never on message text.
