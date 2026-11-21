@@ -4,6 +4,7 @@ import { Download, Folder, Mic, Pause, Play, Spinner, Upload, Wave } from "../co
 import { Waveform } from "../components/Waveform";
 import { CloneDialog } from "../components/CloneDialog";
 import { KeepVoiceDialog } from "./VoiceLab";
+import { DeliveryHelp } from "../components/DeliveryHelp";
 import { estimateSeconds, fmtClock, fmtDuration, wordCount } from "../format";
 import { useStudio } from "../studio";
 import type { GenerateResponse, Take, VoicesResponse } from "../types";
@@ -48,6 +49,17 @@ export function Narrate() {
   const [progress, setProgress] = useState<Record<string, number>>({});
   const audio = useRef<HTMLAudioElement>(new Audio());
   const fileInput = useRef<HTMLInputElement>(null);
+  const script = useRef<HTMLTextAreaElement>(null);
+  /** Inserts a model tag at the cursor (or the end), with spaces around it, and puts the cursor after it. */
+  const insertTag = useCallback((tag: string) => {
+    const el = script.current;
+    const at = el ? el.selectionStart : text.length;
+    const endAt = el ? el.selectionEnd : text.length;
+    const before = text.slice(0, at), after = text.slice(endAt);
+    const piece = (before && !/\s$/.test(before) ? " " : "") + tag + (after && !/^\s/.test(after) ? " " : "");
+    setText(before + piece + after);
+    requestAnimationFrame(() => { if (el) { el.focus(); const pos = before.length + piece.length; el.setSelectionRange(pos, pos); } });
+  }, [text]);
 
   useEffect(() => {
     call<VoicesResponse>("voices.list", { model: modelRef }).then((v) => {
@@ -178,7 +190,8 @@ export function Narrate() {
     <>
       <Head />
       <div className="narrate">
-        <section className="panel editor" aria-label="Script">
+        <div className="narrate-main">
+          <section className="panel editor" aria-label="Script">
           <div className="editor-head">
             <h2>Script</h2>
             <div className="row">
@@ -187,7 +200,7 @@ export function Narrate() {
               <button className="btn small ghost" onClick={() => setText("")} disabled={!text}>Clear</button>
             </div>
           </div>
-          <textarea value={text} onChange={(e) => setText(e.target.value)} aria-label="Text to narrate" spellCheck
+          <textarea ref={script} value={text} onChange={(e) => setText(e.target.value)} aria-label="Text to narrate" spellCheck
             placeholder="Type or paste what NoorVox should say…"
             onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); generate(text); } }} />
           <div className="editor-foot">
@@ -197,6 +210,50 @@ export function Narrate() {
             <span style={{ marginLeft: "auto" }}>Draft saved · Ctrl+Enter to generate</span>
           </div>
         </section>
+
+          <DeliveryHelp caps={caps} onInsertTag={insertTag} onStyle={setStyle}
+            onSliders={(e, p) => { setEmotion(e); setPace(p); }} />
+          <section className="takes" aria-label="Takes">
+            <div className="page-head" style={{ marginBottom: 10 }}>
+              <h2 style={{ margin: 0, fontSize: 16 }}>Takes this session</h2>
+              <span className="muted small">Previews live in your temp folder. Export the ones you want to keep.</span>
+            </div>
+            {takes.length === 0 && <div className="empty">Your generated takes appear here, ready to play, compare and export.</div>}
+            {takes.map((t, i) => (
+              <article key={t.key} className={`take ${i === 0 ? "current" : ""}`}>
+                <button className="play" onClick={() => play(t)} aria-label={playing === t.key ? "Pause" : "Play take"}>
+                  {playing === t.key ? <Pause /> : <Play />}
+                </button>
+                <div style={{ minWidth: 0 }}>
+                  <div className="take-text" title={t.text}>{t.text}</div>
+                  <Waveform url={t.mediaUrl} progress={progress[t.key] ?? 0} label="Seek" onSeek={(f) => play(t, f)} />
+                  <div className="take-meta">
+                    <span><b style={{ color: "var(--text)" }}>{fmtDuration(t.result.durationMs)}</b> measured</span>
+                    <span>{t.voice?.displayName ?? t.result.voice}{t.result.voiceKind === "clone" ? " (cloned)" : ""}{t.result.backend.id === "kokoro-onnx" && ` · ${t.result.speed.toFixed(2)}×`}</span>
+                    {t.result.emotion != null && <span>emotion {t.result.emotion.toFixed(2)} · pace {t.result.pace?.toFixed(2)}</span>}
+                    {t.result.watermark && <span title="The engine adds an inaudible watermark that marks the audio as AI-generated">watermarked</span>}
+                    {t.result.style && <span title={t.result.style}>style: “{t.result.style.length > 40 ? t.result.style.slice(0, 40) + "…" : t.result.style}”</span>}
+                    {t.result.seed != null && (
+                      <button className="linkish mono" title="Use this seed for the next take" onClick={() => { setSeed(t.result.seed!); setSeedLocked(true); }}>
+                        seed {t.result.seed}
+                      </button>
+                    )}
+                    <span>{t.result.sampleRate / 1000} kHz · {t.result.bitsPerSample}-bit mono</span>
+                    <span>generated in {(t.result.timings.synthesisMs / 1000).toFixed(1)} s ({t.result.backend.executionProvider})</span>
+                    {t.exportedPath && <span className="pill ok">Exported</span>}
+                  </div>
+                </div>
+                <div className="row" style={{ flexWrap: "nowrap" }}>
+                  {t.result.voiceKind !== "clone" && (
+                    <button className="btn small" onClick={() => setKeeping(t)} title="Keep this take's voice as a permanent voice (spoken by the Qwen Base model)">Keep as voice…</button>
+                  )}
+                  <button className="btn small primary" onClick={() => exportTake(t)}><Download size={15} /> Export…</button>
+                  <button className="btn small" onClick={() => reveal(t.exportedPath ?? t.result.outputPath)} aria-label="Show file in Explorer"><Folder size={15} /></button>
+                </div>
+              </article>
+            ))}
+          </section>
+        </div>
 
         <aside className="side stack" aria-label="Voice and generation">
           <section className="panel">
@@ -333,46 +390,6 @@ export function Narrate() {
           onCreated={(id) => { setCloning(false); setVoiceId(id); setReloadVoices((n) => n + 1); notify("Voice created. It's ready to use."); }} />
       )}
 
-      <section className="takes" aria-label="Takes">
-        <div className="page-head" style={{ marginBottom: 10 }}>
-          <h2 style={{ margin: 0, fontSize: 16 }}>Takes this session</h2>
-          <span className="muted small">Previews live in your temp folder. Export the ones you want to keep.</span>
-        </div>
-        {takes.length === 0 && <div className="empty">Your generated takes appear here, ready to play, compare and export.</div>}
-        {takes.map((t, i) => (
-          <article key={t.key} className={`take ${i === 0 ? "current" : ""}`}>
-            <button className="play" onClick={() => play(t)} aria-label={playing === t.key ? "Pause" : "Play take"}>
-              {playing === t.key ? <Pause /> : <Play />}
-            </button>
-            <div style={{ minWidth: 0 }}>
-              <div className="take-text" title={t.text}>{t.text}</div>
-              <Waveform url={t.mediaUrl} progress={progress[t.key] ?? 0} label="Seek" onSeek={(f) => play(t, f)} />
-              <div className="take-meta">
-                <span><b style={{ color: "var(--text)" }}>{fmtDuration(t.result.durationMs)}</b> measured</span>
-                <span>{t.voice?.displayName ?? t.result.voice}{t.result.voiceKind === "clone" ? " (cloned)" : ""} · {t.result.speed.toFixed(2)}×</span>
-                {t.result.emotion != null && <span>emotion {t.result.emotion.toFixed(2)} · pace {t.result.pace?.toFixed(2)}</span>}
-                {t.result.watermark && <span title="The engine adds an inaudible watermark that marks the audio as AI-generated">watermarked</span>}
-                {t.result.style && <span title={t.result.style}>style: “{t.result.style.length > 40 ? t.result.style.slice(0, 40) + "…" : t.result.style}”</span>}
-                {t.result.seed != null && (
-                  <button className="linkish mono" title="Use this seed for the next take" onClick={() => { setSeed(t.result.seed!); setSeedLocked(true); }}>
-                    seed {t.result.seed}
-                  </button>
-                )}
-                <span>{t.result.sampleRate / 1000} kHz · {t.result.bitsPerSample}-bit mono</span>
-                <span>generated in {(t.result.timings.synthesisMs / 1000).toFixed(1)} s ({t.result.backend.executionProvider})</span>
-                {t.exportedPath && <span className="pill ok">Exported</span>}
-              </div>
-            </div>
-            <div className="row" style={{ flexWrap: "nowrap" }}>
-              {t.result.voiceKind !== "clone" && (
-                <button className="btn small" onClick={() => setKeeping(t)} title="Keep this take's voice as a permanent voice (spoken by the Qwen Base model)">Keep as voice…</button>
-              )}
-              <button className="btn small primary" onClick={() => exportTake(t)}><Download size={15} /> Export…</button>
-              <button className="btn small" onClick={() => reveal(t.exportedPath ?? t.result.outputPath)} aria-label="Show file in Explorer"><Folder size={15} /></button>
-            </div>
-          </article>
-        ))}
-      </section>
     </>
   );
 }

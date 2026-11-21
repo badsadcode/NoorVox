@@ -28,6 +28,8 @@ export interface ModelCapabilities {
   pace?: boolean; paceMin?: number; paceMax?: number; paceDefault?: number;
   /** The engine watermarks its audio (e.g. "perth" for Chatterbox); null/absent = no watermark. */
   watermark?: string | null;
+  /** Inline tags the model understands, from its own tokenizer (Chatterbox Turbo: "[laugh]", "[whispering]"…). */
+  tags?: string[];
   requiresGpu: boolean; languages: string[];
 }
 

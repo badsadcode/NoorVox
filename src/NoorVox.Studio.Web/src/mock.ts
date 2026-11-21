@@ -26,6 +26,10 @@ const models = [
   { reference: "chatterbox-english@1.0", id: "chatterbox-english", displayName: "Chatterbox (English)", isDefault: false, engineReady: true,
     capabilities: { speed: false, minSpeed: 1, maxSpeed: 1, style: false, cloning: true, blending: false, seed: true, requiresGpu: true, languages: [] as string[],
       emotion: true, emotionMin: 0.25, emotionMax: 2, emotionDefault: 0.5, pace: true, paceMin: 0.1, paceMax: 1, paceDefault: 0.5, watermark: "perth" } },
+  { reference: "chatterbox-turbo@1.0", id: "chatterbox-turbo", displayName: "Chatterbox Turbo", isDefault: false, engineReady: true,
+    capabilities: { speed: false, minSpeed: 1, maxSpeed: 1, style: false, cloning: true, blending: false, seed: true, requiresGpu: true, languages: [] as string[],
+      watermark: "perth", tags: ["[advertisement]", "[angry]", "[chuckle]", "[clear throat]", "[cough]", "[crying]", "[dramatic]", "[fear]", "[gasp]", "[groan]",
+        "[happy]", "[laugh]", "[narration]", "[sarcastic]", "[shush]", "[sigh]", "[sniff]", "[surprised]", "[whispering]"] } },
   { reference: "qwen3-tts-1.7b-voicedesign@1.0", id: "qwen3-tts-1.7b-voicedesign", displayName: "Qwen3-TTS 1.7B VoiceDesign (voice from a description)", capabilities: { ...QWEN_CAPS, style: false, design: true }, isDefault: false, engineReady: true },
 ];
 const consentStatements = { "own-voice": "This recording is my own voice.", "speaker-permission": "I have the speaker's permission to create and use a synthetic copy of their voice." };

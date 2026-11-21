@@ -94,6 +94,9 @@ Use a project for anything bigger than a quick line: a documentary episode, an a
   - Every Qwen take shows its **seed**. Click it to reuse it: the same seed, text and settings give exactly the same audio on this PC.
   - Qwen Base: **Clone a voice…** creates a voice from a 5–15 s recording (WAV) and its exact transcript. You must confirm that it's your
     own voice or that you have the speaker's permission; that statement is saved with the voice, and its takes are marked "cloned".
+- **Delivery help** (under the script) shows what the chosen model understands: Chatterbox Turbo's tags such as `[laugh]`, `[sigh]` or
+  `[whispering]` (click to insert at the cursor), emotion presets for Chatterbox, style ideas for Qwen, tips for Kokoro. Captions leave
+  tags out. Hide it with its header.
 - **Generate narration** (or **Ctrl+Enter**). The first generation starts the voice engine (a few seconds); after that it stays warm.
 - **Takes this session:** each generation becomes a take you can play and seek on its waveform. Each shows its *measured* duration, voice,
   speed, format and generation time. Takes survive page switches.

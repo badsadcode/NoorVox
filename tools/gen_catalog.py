@@ -176,7 +176,10 @@ def chatterbox_model(mid, name, repo, rev, wanted, multilingual, sliders, desc):
             # pace = cfg_weight. 0.0 crashes chatterbox-tts 0.1.7 (tensor size mismatch), so the range starts at 0.1.
             # Measured (English, 3 seeds): 0.1 → 8.85 s, 0.5 → 8.11 s, 1.0 → 7.87 s for the same text: lower is slower, gently.
             "pace": sliders, "paceMin": 0.1 if sliders else 0, "paceMax": 1.0 if sliders else 0, "paceDefault": 0.5 if sliders else 0,
-            "watermark": "perth"}
+            "watermark": "perth",
+            # Inline tags: only where the authors document them (the Turbo README) and the tokenizer defines them. The English
+            # tokenizer also contains tag-like tokens, but nothing says that model was trained on them, so none are offered.
+            "tags": sorted(json.loads(fetch(f"https://huggingface.co/{repo}/resolve/{rev}/added_tokens.json")).keys()) if mid == "chatterbox-turbo" else []}
     m = {"id": mid, "version": "1.0", "displayName": name, "description": desc, "backend": "chatterbox", "recommended": False,
          "license": "MIT", "licenseUrl": f"https://huggingface.co/{repo}", "source": f"https://huggingface.co/{repo}/tree/{rev}",
          "defaultVoice": "default", "sampleRate": 24000, "defaultVoicePacks": [], "downloads": downloads, "files": files,

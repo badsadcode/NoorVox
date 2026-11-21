@@ -26,6 +26,11 @@ public sealed record ModelCapabilities
     public double PaceMin { get; init; }
     public double PaceMax { get; init; }
     public double PaceDefault { get; init; }
+    /// <summary>
+    /// Inline tags the model was trained to act on, typed into the text (Chatterbox Turbo: <c>[laugh]</c>, <c>[sigh]</c>,
+    /// <c>[whispering]</c>…). Taken from the model's own tokenizer file and documented by its authors; empty = no tags.
+    /// </summary>
+    public List<string> Tags { get; init; } = [];
     /// <summary>The engine marks its audio with an inaudible watermark (Chatterbox: Resemble AI "Perth"); null = none.</summary>
     public string? Watermark { get; init; }
     /// <summary>Kokoro voice blending (weighted average of style vectors).</summary>

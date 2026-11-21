@@ -105,7 +105,9 @@ Catalog ids: `kokoro-82m`, `qwen3-tts-1.7b-customvoice`, `qwen3-tts-1.7b-base`, 
 
 **Chatterbox** (Resemble AI, MIT; engine pack `chatterbox`): `cloning` is true for all three variants and needs only the profile's
 reference audio, no transcript; voice `default` is the model's own voice. English and Multilingual have `emotion` and `pace`;
-Turbo has neither (its code ignores them). Multilingual adds 23 `languages`. `watermark: "perth"`: every output carries Resemble
+Turbo has neither (its code ignores them), but it has 19 inline `tags` (`[laugh]`, `[chuckle]`, `[sigh]`, `[gasp]`, `[cough]`, `[whispering]`,
+`[angry]`, `[dramatic]`, …) that go straight into the text; `capabilities.tags` lists them, taken from the model's tokenizer. Captions
+written by `export assemble` leave tags out. Multilingual adds 23 `languages`. `watermark: "perth"`: every output carries Resemble
 AI's inaudible watermark, which `synth` reports as `data.watermark`.
 
 ### `noorvox models install <id[@version]> [--no-voices] [--no-engine]`

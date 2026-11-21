@@ -40,6 +40,11 @@ public class ChatterboxTests : IDisposable
         Assert.Equal(0.1, en.Capabilities.PaceMin);                       // 0.0 crashes chatterbox-tts 0.1.7
         Assert.False(turbo.Capabilities!.Emotion || turbo.Capabilities.Pace); // Turbo's code ignores both
         Assert.Empty(en.Capabilities.Languages);
+        Assert.Contains("[laugh]", turbo.Capabilities!.Tags);              // from the model's own added_tokens.json
+        Assert.Contains("[whispering]", turbo.Capabilities.Tags);
+        Assert.Empty(en.Capabilities.Tags);                                 // not documented for English, so not offered
+        Assert.Equal("That is so funny. I cannot believe it.",
+            NoorVox.Core.Export.Subtitles.StripTags("[whispering] That is so funny. [laugh] I cannot believe it [sigh].", turbo.Capabilities.Tags));
         Assert.Equal(23, ml.Capabilities!.Languages.Count);
         Assert.All(ml.Capabilities.Languages, l => Assert.True(ChatterboxBackend.LanguageIds.ContainsKey(l), l));
         // Only the files each loader reads, not the whole repository.

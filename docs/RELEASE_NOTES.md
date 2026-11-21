@@ -1,5 +1,16 @@
 # NoorVox release notes
 
+## 0.4.1 — Delivery help and a tidier Quick narration
+
+- **Delivery help** under the script shows what the selected model understands, and nothing it doesn't:
+  - Chatterbox Turbo: its 19 inline **tags** (`[laugh]`, `[chuckle]`, `[sigh]`, `[gasp]`, `[whispering]`, `[angry]`, `[dramatic]`…), read
+    from the model's own tokenizer and documented by Resemble AI; click one to insert it at the cursor. Measured: the same seed and text
+    with `[laugh]` ran 1.4 s longer, with `[sigh]` 1.2 s.
+  - Chatterbox English/Multilingual: emotion presets (Calm, Neutral, Expressive, Dramatic) that set both sliders.
+  - Qwen CustomVoice: style ideas; VoiceDesign: voice-description ideas; Kokoro and Qwen Base: honest tips.
+- **Takes moved up** under the script, so new takes are visible without scrolling past the voice controls.
+- Captions (SRT/VTT) leave model tags out, so subtitles show what is said; the script, takes and manifest keep them.
+
 ## 0.4.0 — Chatterbox
 
 - **Chatterbox** (Resemble AI, MIT) as a third engine, in three variants: **English** and **Multilingual** (23 languages) with an

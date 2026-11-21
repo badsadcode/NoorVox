@@ -170,8 +170,11 @@ public static class Assembler
         bool speakers = store.Kind.UsesSpeakers;
         if (options.Subtitles)
         {
-            FileUtil.WriteAllTextAtomic(srtPath!, Subtitles.Srt(segments, speakers, options.SubtitleLineChars));
-            FileUtil.WriteAllTextAtomic(vttPath!, Subtitles.Vtt(segments, speakers, options.SubtitleLineChars));
+            // Captions show what is said: delivery tags such as [laugh] or [whispering] are directions for the model, not words.
+            var captions = model.Capabilities.Tags.Count == 0 ? segments
+                : segments.Select(s => s with { Text = Subtitles.StripTags(s.Text, model.Capabilities.Tags) }).ToList();
+            FileUtil.WriteAllTextAtomic(srtPath!, Subtitles.Srt(captions, speakers, options.SubtitleLineChars));
+            FileUtil.WriteAllTextAtomic(vttPath!, Subtitles.Vtt(captions, speakers, options.SubtitleLineChars));
         }
 
         var manifest = new AssemblyManifest(
@@ -245,6 +248,14 @@ public static class Subtitles
     }
 
     static string Escape(string s) => s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+
+    /// <summary>Removes the model's inline tags (exact, case-insensitive) and tidies the spaces they leave.</summary>
+    public static string StripTags(string text, IReadOnlyCollection<string> tags)
+    {
+        foreach (var tag in tags) text = text.Replace(tag, " ", StringComparison.OrdinalIgnoreCase);
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\s+([,.!?;:])", "$1");
+        return System.Text.RegularExpressions.Regex.Replace(text, @"\s{2,}", " ").Trim();
+    }
 
     public static string Time(long ms, char sep)
     {

@@ -156,7 +156,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .voice-card b { display: block; }
 .speed-row { display: flex; justify-content: space-between; align-items: baseline; }
 .gen-status { min-height: 20px; font-size: 12px; color: var(--text-muted); display: flex; gap: 6px; align-items: center; }
-.takes { margin-top: 16px; }
+.takes { margin-top: 2px; }
 .take { display: grid; grid-template-columns: 44px minmax(0,1fr) auto; gap: 14px; align-items: center; padding: 12px 14px; border-radius: 11px;
   background: var(--surface); border: 1px solid var(--border); margin-bottom: 10px; }
 .take.current { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
@@ -300,3 +300,16 @@ table.audit td { padding: 7px 8px; border-top: 1px solid var(--border); vertical
 .inline-edit:hover, .inline-edit:focus { border-color: var(--border); background: var(--surface-2); }
 .inline-edit.muted { color: var(--text-muted); font-size: 12.5px; }
 .pack .btn { flex: none; }
+
+/* 0.4.1: Quick narration left column (script, delivery help, takes) */
+.narrate-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.help { padding: 0; }
+.help-head { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px; background: none; border: 0; cursor: pointer; text-align: left; }
+.help-head h2 { margin: 0; }
+.help-body { padding: 0 16px 14px; display: flex; flex-direction: column; gap: 8px; }
+.help-body p { margin: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-size: 12.5px; cursor: pointer; }
+.chip:hover { border-color: var(--accent); }
+.chip.mood { color: var(--accent-strong); }
+.chip .mono { opacity: .7; margin-left: 4px; font-size: 11px; }

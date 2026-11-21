@@ -67,7 +67,7 @@ Invoke-NoorVox recordings list                         # the user's Voice lab re
 | `qwen3-tts-1.7b-voicedesign` | NVIDIA GPU | one pseudo-voice `designed` | `--style` is **required** and *is* the voice description; `--seed`, `--language`. |
 | `chatterbox-english` | NVIDIA GPU | built-in `default` + the user's voice profiles (clone / designed / saved; no transcript needed) | `--emotion` 0.25–2.0 (flat → dramatic), `--pace` 0.1–1.0 (lower = a little slower), `--seed`. English only. Output is watermarked. |
 | `chatterbox-multilingual` | NVIDIA GPU | same | as English plus `--language` (23: `english`, `german`, `french`, `spanish`, `italian`, `polish`, `japanese`, `chinese`, …) |
-| `chatterbox-turbo` | NVIDIA GPU | same | `--seed` only (no emotion/pace: the model ignores them). About 2× faster than real time. Watermarked. |
+| `chatterbox-turbo` | NVIDIA GPU | same | `--seed` only (no emotion/pace: the model ignores them), plus inline **tags** in the text: `[laugh]`, `[chuckle]`, `[sigh]`, `[gasp]`, `[cough]`, `[whispering]`, `[angry]`, `[dramatic]`… (full list in `capabilities.tags`). About 2× faster than real time. Watermarked. |
 | `qwen3-tts-0.6b-*` | NVIDIA GPU | as the 1.7B models | smaller download (not installed or measured on Tom's PC yet); 0.6B CustomVoice has no `--style` |
 
 - Qwen languages: `auto`, `english`, `chinese`, `japanese`, `korean`, `german`, `french`, `russian`, `portuguese`, `spanish`, `italian`.
@@ -119,6 +119,7 @@ A project gives stable segment ids, multiple takes per line, approvals, resumabl
 **Script format** (Markdown): `#` = section (episode/chapter), `##` = scene, each paragraph = one segment (1–3 sentences).
 `<!-- comments -->` are never spoken and attach to the **next** paragraph (use them for visual cues and notes).
 Write text the way it should *read* (subtitles show it exactly); fix how words are *spoken* with pronunciation rules.
+Model tags (Chatterbox Turbo's `[laugh]` etc.) may go in the text: only those in the model's `capabilities.tags`; captions leave them out.
 
 ```markdown
 # Episode 1 – The Terrible Idea

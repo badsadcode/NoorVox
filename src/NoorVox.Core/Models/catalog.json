@@ -1239,7 +1239,8 @@
         "paceMin": 0.1,
         "paceMax": 1.0,
         "paceDefault": 0.5,
-        "watermark": "perth"
+        "watermark": "perth",
+        "tags": []
       },
       "engine": "chatterbox",
       "family": "chatterbox",
@@ -1398,7 +1399,8 @@
         "paceMin": 0.1,
         "paceMax": 1.0,
         "paceDefault": 0.5,
-        "watermark": "perth"
+        "watermark": "perth",
+        "tags": []
       },
       "engine": "chatterbox",
       "family": "chatterbox",
@@ -1581,7 +1583,28 @@
         "paceMin": 0,
         "paceMax": 0,
         "paceDefault": 0,
-        "watermark": "perth"
+        "watermark": "perth",
+        "tags": [
+          "[advertisement]",
+          "[angry]",
+          "[chuckle]",
+          "[clear throat]",
+          "[cough]",
+          "[crying]",
+          "[dramatic]",
+          "[fear]",
+          "[gasp]",
+          "[groan]",
+          "[happy]",
+          "[laugh]",
+          "[narration]",
+          "[sarcastic]",
+          "[shush]",
+          "[sigh]",
+          "[sniff]",
+          "[surprised]",
+          "[whispering]"
+        ]
       },
       "engine": "chatterbox",
       "family": "chatterbox",
