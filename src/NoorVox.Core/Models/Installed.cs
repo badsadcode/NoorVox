@@ -145,9 +145,14 @@ public sealed class ModelRegistry(StorageContext storage)
                 $"Model '{reference}' is not installed in {storage.ModelsDir}.",
                 new { model = reference, modelsDir = storage.ModelsDir, hint = $"noorvox models install {ModelRef.Parse(reference).Id}" });
         }
-        return List().FirstOrDefault() ?? throw new NoorVoxException(ErrorCodes.ModelNotInstalled, ExitCode.ModelMissing,
-            $"No voice model is installed in {storage.ModelsDir}.",
-            new { modelsDir = storage.ModelsDir, hint = "noorvox models install kokoro-82m" });
+        // No default set: the catalog's recommended model (Kokoro: fast, CPU, no load wait) beats alphabetical order, so installing
+        // a GPU engine like Chatterbox or Qwen never silently becomes everyone's default.
+        var installed = List();
+        var recommended = ModelCatalog.Embedded?.Models.Where(m => m.Recommended).Select(m => m.Id).ToHashSet() ?? [];
+        return installed.FirstOrDefault(m => recommended.Contains(m.Id)) ?? installed.FirstOrDefault()
+            ?? throw new NoorVoxException(ErrorCodes.ModelNotInstalled, ExitCode.ModelMissing,
+                $"No voice model is installed in {storage.ModelsDir}.",
+                new { modelsDir = storage.ModelsDir, hint = "noorvox models install kokoro-82m" });
     }
 
     /// <summary><paramref name="full"/> = sha256 every file; otherwise existence + size only (fast).</summary>

@@ -34,9 +34,10 @@ Tests use isolated temp homes (`NOORVOX_HOME`) and never touch the user's settin
 
 1. **Never kill processes by name.** Stop workers with `noorvox workers stop` / `WorkerSupervisor`, which only touch recorded, NoorVox-launched PIDs.
 2. **Don't add fake controls.** Expose only what the model's `capabilities` (catalog → manifest, `Core/Models/Capabilities.cs`) say it
-   supports (Kokoro: voice, speed, blending; Qwen: voice, style on 1.7B CustomVoice, cloning on Base, seed, language, no speed).
+   supports (Kokoro: voice, speed, blending; Qwen: voice, style on 1.7B CustomVoice, cloning on Base, seed, language, no speed;
+   Chatterbox: cloning, seed, emotion + pace except Turbo, languages on Multilingual). The catalog's capabilities win over installed manifests.
 3. **No inference code outside the worker process.** Core stays backend-agnostic. Python engines run as the worker's child process
-   (`NoorVox.Backends.Qwen`) and are installed only from hash-locked lock files (`tools/gen_engine_lock.py`), never with unpinned `pip install`.
+   (`NoorVox.Backends.Python`) and are installed only from hash-locked lock files (`tools/gen_engine_lock.py`), never with unpinned `pip install`.
 4. **Measured, never estimated:** durations come from WAV samples; resource numbers carry `source` + `sampledAt`; unknown = "unavailable".
 5. **C: is allowed.** Never block a path because of its drive; always show resolved paths.
 6. **Never overwrite** user audio or approved takes without an explicit flag.

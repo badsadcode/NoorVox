@@ -19,7 +19,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NoorVox.Tests", "tests\Noor
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NoorVox.Studio", "src\NoorVox.Studio\NoorVox.Studio.csproj", "{3CE74E41-4A4B-4615-8691-B614140C710A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NoorVox.Backends.Qwen", "src\NoorVox.Backends.Qwen\NoorVox.Backends.Qwen.csproj", "{CD0F9F07-5E11-41AD-8600-90F49D9D2A7C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NoorVox.Backends.Python", "src\NoorVox.Backends.Python\NoorVox.Backends.Python.csproj", "{CD0F9F07-5E11-41AD-8600-90F49D9D2A7C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

@@ -24,6 +24,10 @@ export interface StoragePath {
 /** Mirrors Core/Models/Capabilities.cs: the UI shows only controls that are true here. */
 export interface ModelCapabilities {
   speed: boolean; minSpeed: number; maxSpeed: number; style: boolean; cloning: boolean; design?: boolean; blending: boolean; seed: boolean;
+  emotion?: boolean; emotionMin?: number; emotionMax?: number; emotionDefault?: number;
+  pace?: boolean; paceMin?: number; paceMax?: number; paceDefault?: number;
+  /** The engine watermarks its audio (e.g. "perth" for Chatterbox); null/absent = no watermark. */
+  watermark?: string | null;
   requiresGpu: boolean; languages: string[];
 }
 
@@ -141,6 +145,9 @@ export interface NarrationResult {
   seed?: number | null;
   language?: string | null;
   voiceKind?: VoiceKind;
+  emotion?: number | null;
+  pace?: number | null;
+  watermark?: string | null;
 }
 
 export interface GenerateResponse { result: NarrationResult; mediaUrl: string }

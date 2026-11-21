@@ -85,7 +85,8 @@ public sealed class StudioApi(MainWindow window, JobObject job, BridgeHost bridg
     public sealed record WorkerArgs(string WorkerId);
     public sealed record WorkerStopArgs(string WorkerId, bool Force);
     public sealed record ForceArgs(bool Force);
-    public sealed record GenerateArgs(string Text, string Voice, double Speed, string? Model, string? Style, long? Seed, string? Language);
+    public sealed record GenerateArgs(string Text, string Voice, double Speed, string? Model, string? Style, long? Seed, string? Language,
+        double? Emotion = null, double? Pace = null);
     public sealed record ModelArgs(string? Model);
     public sealed record CloneRecordingArgs(string RecordingId, string Name, string Consent, string? Language, string? Gender);
     /// <param name="Transcript">The text that take spoke (what the page sent to generate it).</param>
@@ -585,6 +586,8 @@ public sealed class StudioApi(MainWindow window, JobObject job, BridgeHost bridg
             Style = a.Style,
             Seed = a.Seed,
             Language = string.IsNullOrEmpty(a.Language) ? null : a.Language,
+            Emotion = a.Emotion,
+            Pace = a.Pace,
             OutputPath = file,
             WriteManifest = true,
             WorkerId = StudioWorker,

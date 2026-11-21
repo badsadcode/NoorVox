@@ -9,7 +9,10 @@ public sealed record VoiceInfo(string Id, string Language, string LanguageName, 
 /// <param name="Style">Delivery directions; only for models whose capabilities allow it.</param>
 /// <param name="Seed">Sampling seed; only for models that are reproducible with a seed.</param>
 /// <param name="Language">Language name for engines that take one (Qwen: <c>auto</c>, <c>english</c>, ...).</param>
-public sealed record SynthesisRequest(string Text, string VoiceId, double Speed, string? Style = null, long? Seed = null, string? Language = null);
+/// <param name="Emotion">Emotion intensity (Chatterbox exaggeration); only for models with the capability.</param>
+/// <param name="Pace">Pace guidance (Chatterbox cfg weight); only for models with the capability.</param>
+public sealed record SynthesisRequest(string Text, string VoiceId, double Speed, string? Style = null, long? Seed = null, string? Language = null,
+    double? Emotion = null, double? Pace = null);
 
 /// <summary>Facts about a synthesized file, measured from the written audio.</summary>
 public sealed record SynthesisResult(string OutputPath, int SampleRate, int Channels, int BitsPerSample, long Samples, long DurationMs, long ElapsedMs,

@@ -4,6 +4,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Models\catalog.json" LogicalName="NoorVox.Core.catalog.json" />
     <EmbeddedResource Include="Engines\qwen-tts.lock" LogicalName="NoorVox.Core.Engines.qwen-tts.lock" />
+    <EmbeddedResource Include="Engines\chatterbox.lock" LogicalName="NoorVox.Core.Engines.chatterbox.lock" />
     <InternalsVisibleTo Include="NoorVox.Tests" />
   </ItemGroup>
 </Project>

@@ -1,7 +1,7 @@
 // NoorVox.Worker — isolated inference process. Launched only by NoorVox.Core's WorkerSupervisor.
 // Exit codes: 0 clean shutdown, 2 bad arguments, 3 another worker with this id is alive, 4 missing token, 1 crash.
 using NoorVox.Backends.Kokoro;
-using NoorVox.Backends.Qwen;
+using NoorVox.Backends.Python;
 using NoorVox.Core;
 using NoorVox.Core.Backends;
 using NoorVox.Core.Workers;
@@ -42,6 +42,7 @@ try
     {
         "kokoro-onnx" => new KokoroBackend(log.Write),
         "qwen3-tts" => new QwenBackend(log.Write),
+        "chatterbox" => new ChatterboxBackend(log.Write),
         var other => throw new NoorVoxException(ErrorCodes.Unsupported, ExitCode.WorkerError, $"This NoorVox has no '{other}' backend; update NoorVox."),
     }, log);
     await host.RunAsync();

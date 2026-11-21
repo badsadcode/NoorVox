@@ -378,6 +378,7 @@ public sealed class WorkerSupervisor(StorageContext storage, string workerExePat
             script = model.Backend switch
             {
                 "qwen3-tts" => Path.Combine(Path.GetDirectoryName(WorkerExePath)!, "engines", "qwen", "noorvox_qwen.py"),
+                "chatterbox" => Path.Combine(Path.GetDirectoryName(WorkerExePath)!, "engines", "chatterbox", "noorvox_chatterbox.py"),
                 _ => null,
             };
         }

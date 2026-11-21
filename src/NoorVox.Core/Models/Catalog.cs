@@ -46,6 +46,15 @@ public sealed record ModelCatalog(int CatalogSchemaVersion, string CatalogVersio
     public CatalogEngine? FindEngine(string id) =>
         (Engines ?? []).Where(e => e.Id.Equals(id, StringComparison.OrdinalIgnoreCase)).OrderByDescending(e => ModelRef.ParseVersion(e.Version)).FirstOrDefault();
 
+    static readonly Lazy<ModelCatalog?> EmbeddedCatalog = new(() =>
+    {
+        try { return LoadEmbedded(); }
+        catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or System.Text.Json.JsonException) { return null; }
+    });
+
+    /// <summary>The catalog shipped in this build, parsed once (null only if the embedded resource is broken).</summary>
+    public static ModelCatalog? Embedded => EmbeddedCatalog.Value;
+
     public static ModelCatalog LoadEmbedded()
     {
         using var stream = typeof(ModelCatalog).Assembly.GetManifestResourceStream("NoorVox.Core.catalog.json")

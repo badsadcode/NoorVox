@@ -1,5 +1,5 @@
 {
-  "when": "2026-11-20T23:09:45.811Z",
+  "when": "2026-11-21T01:38:04.149Z",
   "results": [
     {
       "name": "projects page lists the project",
@@ -79,7 +79,7 @@
     {
       "name": "no worker left after close",
       "ok": true,
-      "detail": "worker pid 47844"
+      "detail": "worker pid 10972"
     }
   ]
 }

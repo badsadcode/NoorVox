@@ -16,6 +16,24 @@ public class DocsContractTests
     }
 
     [Fact]
+    public void Every_value_less_option_in_a_usage_string_is_a_parser_flag()
+    {
+        // In usage strings a value-less option looks like "[--no-engine]" or "--approve]"; one with a value like "[--model REF]".
+        foreach (var c in CommandTable.All)
+            foreach (var opt in c.Options)
+            {
+                var m = System.Text.RegularExpressions.Regex.Match(c.Usage, $@"--{System.Text.RegularExpressions.Regex.Escape(opt)}(?<next>[\]\)| ]|$)(?<after>\S*)");
+                if (!m.Success) continue;
+                bool takesValue = m.Groups["next"].Value == " " && m.Groups["after"].Value.Length > 0
+                    && !m.Groups["after"].Value.StartsWith('[') && !m.Groups["after"].Value.StartsWith('|') && !m.Groups["after"].Value.StartsWith("--");
+                if (!takesValue)
+                    Assert.True(ParsedArgs.Flags.Contains(opt), $"'--{opt}' in '{string.Join(' ', c.Path)}' takes no value but is not in ParsedArgs.Flags");
+            }
+        var parsed = ParsedArgs.Parse(["models", "install", "x", "--no-engine", "--json"]);
+        Assert.True(parsed.Has("json")); // regression: --json was once swallowed as the value of --no-engine
+    }
+
+    [Fact]
     public void Every_exit_code_is_documented()
     {
         var doc = File.ReadAllText(Path.Combine(TestPaths.RepoRoot, "docs", "CLI_REFERENCE.md"));

@@ -33,7 +33,7 @@ public static class CommandTable
 
         new(["engines", "list"], "List engine packs (Qwen3-TTS runtime, ONNX Runtime CUDA) and whether they are installed.", "noorvox engines list [--json]", [], EngineCommands.List),
         new(["engines", "install"], "Install an engine pack: verified downloads, hash-locked Python packages, resumable.",
-            "noorvox engines install <qwen-tts|onnxruntime-cuda> [--json]", [], EngineCommands.Install),
+            "noorvox engines install <qwen-tts|chatterbox|onnxruntime-cuda> [--json]", [], EngineCommands.Install),
         new(["engines", "remove"], "Delete an installed engine pack (models and voices stay).", "noorvox engines remove <id> [--json]", [], EngineCommands.Remove),
         new(["gpu", "status"], "Kokoro's provider setting and the GPU the Qwen engine detected at install.", "noorvox gpu status [--json]", [], EngineCommands.GpuStatus),
         new(["gpu", "set"], "Run Kokoro on cpu (default) or cuda (needs the onnxruntime-cuda and qwen-tts engines; falls back to CPU).",
@@ -118,8 +118,8 @@ public static class CommandTable
             ["project", "section", "rate", "normalize", "peak-dbfs", "no-subtitles", "out", "allow-missing", "overwrite"], ProjectCommands.Assemble),
 
         new(["synth"], "Synthesize text to a WAV file and report measured duration and provenance.",
-            "noorvox synth (--text TEXT | --text-file FILE | --stdin) [--out FILE.wav] [--voice ID] [--speed X] [--style TEXT] [--seed N] [--language NAME] [--model REF] [--worker ID] [--keep-worker] [--overwrite] [--manifest] [--json]",
-            ["text", "text-file", "stdin", "out", "voice", "speed", "style", "seed", "language", "model", "worker", "keep-worker", "overwrite", "manifest"], Commands.Synth),
+            "noorvox synth (--text TEXT | --text-file FILE | --stdin) [--out FILE.wav] [--voice ID] [--speed X] [--style TEXT] [--seed N] [--language NAME] [--emotion X] [--pace X] [--model REF] [--worker ID] [--keep-worker] [--overwrite] [--manifest] [--json]",
+            ["text", "text-file", "stdin", "out", "voice", "speed", "style", "seed", "language", "emotion", "pace", "model", "worker", "keep-worker", "overwrite", "manifest"], Commands.Synth),
     ];
 
     public static (CommandDef? Command, List<string> Remaining) Match(List<string> words)

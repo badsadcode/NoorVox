@@ -417,6 +417,8 @@ public static class Commands
             Seed = a.Has("seed") ? long.TryParse(a.Get("seed"), out var seed) ? seed
                 : throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "--seed must be a whole number.") : null,
             Language = a.Get("language")?.ToLowerInvariant(),
+            Emotion = a.Has("emotion") ? a.GetDouble("emotion", 0.5) : null,
+            Pace = a.Has("pace") ? a.GetDouble("pace", 0.5) : null,
             Model = a.Get("model"),
             OutputPath = a.Get("out") ?? Path.Combine(s.Resolve(StorageKind.Exports).Path, $"noorvox_{DateTime.Now:yyyyMMdd_HHmmss}.wav"),
             Overwrite = a.Has("overwrite"),

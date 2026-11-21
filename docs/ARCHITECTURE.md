@@ -14,7 +14,7 @@ Decisions and measurements: [ADR-0001](adr/0001-kokoro-backend-and-worker-model.
                     │   │  NoorVox.Worker.exe  │◄──────────────────────────────────────────────────
                     │   │  WorkerHost          │
                     │   │  └ ITtsBackend       │  NoorVox.Backends.Kokoro → KokoroSharp → ONNX Runtime (CPU, or CUDA from an engine pack)
-                    │   │    chosen per model    │  NoorVox.Backends.Qwen ─ stdin/stdout JSON ─► python.exe noorvox_qwen.py
+                    │   │    chosen per model    │  NoorVox.Backends.Python ─ stdin/stdout JSON ─► python.exe noorvox_qwen.py
                     │   └──────────────────────┘     (engine pack Python, own kill-on-close Job Object) → PyTorch CUDA
                     ▼
    <home>\settings.json · <home>\runtime\workers\<id>.json · <models>\<id>\<ver>\… · <temp>\logs\worker-<id>.log

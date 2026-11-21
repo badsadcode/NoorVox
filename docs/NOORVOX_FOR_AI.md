@@ -65,12 +65,16 @@ Invoke-NoorVox recordings list                         # the user's Voice lab re
 | `qwen3-tts-1.7b-customvoice` | NVIDIA GPU | 9 speakers: `aiden`, `ryan` (English); `vivian`, `serena`, `uncle_fu`, `dylan`, `eric` (Chinese); `ono_anna` (Japanese); `sohee` (Korean). All speak all 10 languages. | `--style` (written delivery directions), `--seed`, `--language`. **No speed.** |
 | `qwen3-tts-1.7b-base` | NVIDIA GPU | the user's voice profiles: `clone`, `designed`, `synthetic` | `--seed`, `--language`. No style, no speed. |
 | `qwen3-tts-1.7b-voicedesign` | NVIDIA GPU | one pseudo-voice `designed` | `--style` is **required** and *is* the voice description; `--seed`, `--language`. |
+| `chatterbox-english` | NVIDIA GPU | built-in `default` + the user's voice profiles (clone / designed / saved; no transcript needed) | `--emotion` 0.25–2.0 (flat → dramatic), `--pace` 0.1–1.0 (lower = a little slower), `--seed`. English only. Output is watermarked. |
+| `chatterbox-multilingual` | NVIDIA GPU | same | as English plus `--language` (23: `english`, `german`, `french`, `spanish`, `italian`, `polish`, `japanese`, `chinese`, …) |
+| `chatterbox-turbo` | NVIDIA GPU | same | `--seed` only (no emotion/pace: the model ignores them). About 2× faster than real time. Watermarked. |
 | `qwen3-tts-0.6b-*` | NVIDIA GPU | as the 1.7B models | smaller download (not installed or measured on Tom's PC yet); 0.6B CustomVoice has no `--style` |
 
 - Qwen languages: `auto`, `english`, `chinese`, `japanese`, `korean`, `german`, `french`, `russian`, `portuguese`, `spanish`, `italian`.
 - Kokoro voice prefixes: `a` American English, `b` British English, `j` Japanese, `z` Mandarin, `e` Spanish, `f` French, `h` Hindi,
   `i` Italian, `p` Brazilian Portuguese; second letter `f`/`m` = female/male.
 - Speed on Tom's PC (RTX 3080): Kokoro CPU about 6× faster than real time (about 15× on CUDA). Qwen about 2.5× once loaded.
+  Chatterbox English/Multilingual about real time, Turbo about 2×.
   **A Qwen model takes 1–6 minutes to load from the hard drive**, so load it once with a persistent worker (§6).
 - Output is always a 24 kHz mono 16-bit WAV (assembly can resample to 44.1/48 kHz).
 
@@ -190,6 +194,7 @@ Invoke-NoorVox voices remove-profile --voice margaret        # removes a clone/d
 ```powershell
 Invoke-NoorVox models install kokoro-82m                       # ~390 MB
 Invoke-NoorVox models install qwen3-tts-1.7b-customvoice       # ~4.5 GB + the qwen-tts engine (~5.2 GB, once) if missing
+Invoke-NoorVox models install chatterbox-turbo                 # ~3 GB + the chatterbox engine (~5.5 GB, once) if missing
 Invoke-NoorVox engines install onnxruntime-cuda                # ~330 MB: lets Kokoro use the GPU
 Invoke-NoorVox gpu set --kokoro cuda                           # user setting; falls back to CPU (with a reason) if unavailable
 ```
@@ -215,4 +220,4 @@ Installs are resumable and sha256-verified, and the Qwen engine's Python package
 ## 11. What NoorVox doesn't do
 
 No cloud, accounts or telemetry. No video rendering (use the manifest with ffmpeg). No MP3 export (WAV only), no LUFS loudness
-normalisation, no word-level timings (subtitles are per segment), no Polish voices. No speed control on Qwen, and no style control on Kokoro.
+normalisation, no word-level timings (subtitles are per segment), no Polish voices. No speed control on Qwen or Chatterbox, no style control on Kokoro or Chatterbox, and no emotion/pace on Chatterbox Turbo.

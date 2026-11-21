@@ -7,11 +7,11 @@
   <ItemGroup>
     <ProjectReference Include="..\NoorVox.Core\NoorVox.Core.csproj" />
     <ProjectReference Include="..\NoorVox.Backends.Kokoro\NoorVox.Backends.Kokoro.csproj" />
-    <ProjectReference Include="..\NoorVox.Backends.Qwen\NoorVox.Backends.Qwen.csproj" />
+    <ProjectReference Include="..\NoorVox.Backends.Python\NoorVox.Backends.Python.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <!-- The Qwen sidecar ships with the worker; the engine pack only provides Python and packages (ADR-0002). -->
-    <None Include="engines\qwen\noorvox_qwen.py" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Python engine sidecars ship with the worker; engine packs only provide Python and packages (ADR-0002). -->
+    <None Include="engines\**\*.py" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <!-- KokoroSharp's buildTransitive target copies its bundled voices (~80 MB) into the output.
        NoorVox loads voices from the installed model package instead (ADR-0001 decision 8). -->

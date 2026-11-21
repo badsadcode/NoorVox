@@ -7,9 +7,11 @@ namespace NoorVox.Cli;
 /// <summary>Parsed command line: verb path words, positional args and --options.</summary>
 public sealed class ParsedArgs
 {
-    static readonly HashSet<string> Flags = new(StringComparer.OrdinalIgnoreCase)
+    /// <summary>Options that take no value. Every value-less option in a CommandTable usage string must be here (a test checks),
+    /// otherwise the parser would swallow the next option as its value (e.g. <c>--no-engine --json</c>).</summary>
+    public static readonly IReadOnlySet<string> Flags = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        "json", "non-interactive", "help", "quiet", "force", "all", "keep-worker", "overwrite", "check",
+        "json", "non-interactive", "help", "quiet", "force", "all", "keep-worker", "overwrite", "check", "no-engine",
         "no-voices", "stdin", "graceful", "manifest", "full", "quick", "version", "approve", "latest", "allow-missing", "no-text", "segments", "normalize", "no-subtitles", "case-sensitive", "partial",
     };
 

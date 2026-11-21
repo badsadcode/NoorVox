@@ -94,6 +94,29 @@ confirmed ("This recording is my own voice." or "I have the speaker's permission
 | Engine process memory | ~2.2 GB working set (Python + PyTorch + CUDA) on top of the worker |
 | Long text | split at sentence ends into ≤600-character chunks inside the engine; segments in projects are usually shorter |
 
+## Chatterbox (0.4.0)
+
+| | |
+|---|---|
+| Backend id | `chatterbox` |
+| Engine | `chatterbox` engine pack: private Python 3.12.10, PyTorch 2.6.0+cu124, chatterbox-tts 0.1.7, hash-locked (`src/NoorVox.Core/Engines/chatterbox.lock`). Separate from Qwen's because it pins an older PyTorch. |
+| Process | `engines\chatterbox\noorvox_chatterbox.py` in the worker's child Python, on the same `PythonSidecarBackend` as Qwen (Job Object, JSON lines, load stages, GPU numbers). |
+| Models | `chatterbox-english`, `chatterbox-multilingual` (23 languages), `chatterbox-turbo`, pinned Hugging Face revisions, only the files each loader reads (3.0–3.2 GB each) |
+| License | Models and code **MIT** (Resemble AI) |
+| Output | 24 kHz mono 16-bit WAV, **always watermarked** (Resemble AI Perth, inaudible), reported as `watermark: "perth"` |
+
+| Control | English | Multilingual | Turbo |
+|---|---|---|---|
+| Voices | `default` (built-in) + every voice profile from its reference audio (no transcript needed) | same | same |
+| Emotion (`exaggeration`) | 0.25–2.0, default 0.5: flat → dramatic; higher is also a bit faster | same | no (ignored by the model) |
+| Pace (`cfg_weight`) | 0.1–1.0, default 0.5; lower is gently slower (0.1 ≈ 12% slower than 1.0). 0.0 crashes the model, so it isn't offered. | same | no |
+| Language | English only | 23 languages | English |
+| Seed | yes (same seed → identical WAV, verified) | yes | yes |
+
+Performance (RTX 3080, measured): English/Multilingual ≈ real time (RTF 1.0–1.3) at 3.5 GB peak GPU memory; Turbo ≈ 2× real time
+(RTF ≈ 0.5) at 3.1 GB. Cold loads from an HDD took 1.5–4 minutes. Try emotion 0.7+ with pace 0.3 for dramatic reads. See
+[ADR-0003](adr/0003-chatterbox.md).
+
 ## Model and voice files on disk
 
 ```text
@@ -131,7 +154,7 @@ Qwen models live next to it (`<models>\qwen3-tts-1.7b-customvoice\1.0\…` with 
 ## Adding a backend (for developers)
 
 1. Implement `ITtsBackend` (`src/NoorVox.Core/Backends/Contracts.cs`) in a new `NoorVox.Backends.<Name>` project, and map its backend id
-   in `NoorVox.Worker/Program.cs`. A Python model follows `NoorVox.Backends.Qwen`: a sidecar script shipped with the worker, an engine pack
+   in `NoorVox.Worker/Program.cs`. A Python model follows `NoorVox.Backends.Python`: a sidecar script shipped with the worker, an engine pack
    with a hash-locked lock file, `IBackendResources` for GPU/sidecar numbers.
 2. Load it **only** in a worker process; the supervisor and IPC stay the same.
 3. Declare truthful `capabilities` for each catalog model (`Core/Models/Capabilities.cs`); the CLI and UI accept and show only what's `true`.

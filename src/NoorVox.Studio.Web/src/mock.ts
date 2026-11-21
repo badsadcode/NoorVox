@@ -23,6 +23,9 @@ const models = [
   { reference: "kokoro-82m@1.0", id: "kokoro-82m", displayName: "Kokoro 82M v1.0", capabilities: KOKORO_CAPS, isDefault: true, engineReady: true },
   { reference: "qwen3-tts-1.7b-customvoice@1.0", id: "qwen3-tts-1.7b-customvoice", displayName: "Qwen3-TTS 1.7B CustomVoice", capabilities: QWEN_CAPS, isDefault: false, engineReady: true },
   { reference: "qwen3-tts-1.7b-base@1.0", id: "qwen3-tts-1.7b-base", displayName: "Qwen3-TTS 1.7B Base (voice cloning)", capabilities: { ...QWEN_CAPS, style: false, cloning: true }, isDefault: false, engineReady: true },
+  { reference: "chatterbox-english@1.0", id: "chatterbox-english", displayName: "Chatterbox (English)", isDefault: false, engineReady: true,
+    capabilities: { speed: false, minSpeed: 1, maxSpeed: 1, style: false, cloning: true, blending: false, seed: true, requiresGpu: true, languages: [] as string[],
+      emotion: true, emotionMin: 0.25, emotionMax: 2, emotionDefault: 0.5, pace: true, paceMin: 0.1, paceMax: 1, paceDefault: 0.5, watermark: "perth" } },
   { reference: "qwen3-tts-1.7b-voicedesign@1.0", id: "qwen3-tts-1.7b-voicedesign", displayName: "Qwen3-TTS 1.7B VoiceDesign (voice from a description)", capabilities: { ...QWEN_CAPS, style: false, design: true }, isDefault: false, engineReady: true },
 ];
 const consentStatements = { "own-voice": "This recording is my own voice.", "speaker-permission": "I have the speaker's permission to create and use a synthetic copy of their voice." };
@@ -66,6 +69,12 @@ export async function mockCall(method: string, p: Record<string, any>): Promise<
       return { home: "X:\\Mock", settingsFile: "X:\\Mock\\settings.json", paths: ["models", "cache", "temp", "projects", "exports", "webview"].map((kind) => ({
         kind, path: `X:\\Mock\\NoorVox\\${kind[0].toUpperCase()}${kind.slice(1)}`, source: "configured", drive: "X:\\", exists: true, freeBytes: 1.3e12 })) };
     case "voices.list":
+      if (p.model?.startsWith("chatterbox")) {
+        const m = models.find((x) => x.reference === p.model)!;
+        return { model: m.reference, modelName: m.displayName, defaultVoice: "default", capabilities: m.capabilities, engineReady: true,
+          voices: [{ id: "default", displayName: "Chatterbox default", gender: "unknown", language: "english", languageName: "English", packId: "built-in", kind: "built-in",
+            description: "The voice that ships with the model." }], models, consentStatements };
+      }
       if (p.model?.startsWith("qwen3-tts-1.7b-base"))
         return { model: models[2].reference, modelName: models[2].displayName, defaultVoice: null, capabilities: models[2].capabilities, engineReady: true, voices: [], models, consentStatements };
       return p.model?.startsWith("qwen")

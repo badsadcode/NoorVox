@@ -16,6 +16,18 @@ public sealed record ModelCapabilities
     public bool Cloning { get; init; }
     /// <summary>Makes a new voice from a written description (Qwen VoiceDesign). The description goes in the style field and is required.</summary>
     public bool Design { get; init; }
+    /// <summary>An emotion-intensity slider (Chatterbox "exaggeration"): low = flat and calm, high = dramatic.</summary>
+    public bool Emotion { get; init; }
+    public double EmotionMin { get; init; }
+    public double EmotionMax { get; init; }
+    public double EmotionDefault { get; init; }
+    /// <summary>A pace/steadiness slider (Chatterbox "cfg weight"): lower = slower, more deliberate delivery.</summary>
+    public bool Pace { get; init; }
+    public double PaceMin { get; init; }
+    public double PaceMax { get; init; }
+    public double PaceDefault { get; init; }
+    /// <summary>The engine marks its audio with an inaudible watermark (Chatterbox: Resemble AI "Perth"); null = none.</summary>
+    public string? Watermark { get; init; }
     /// <summary>Kokoro voice blending (weighted average of style vectors).</summary>
     public bool Blending { get; init; }
     /// <summary>A seed makes a take reproducible on the same GPU and software.</summary>
@@ -30,6 +42,16 @@ public sealed record ModelCapabilities
         Speed = true, MinSpeed = 0.5, MaxSpeed = 2.0, Blending = true,
     };
 
+    /// <summary>
+    /// The catalog is the authority for models it knows (same id and version): a manifest keeps the capabilities from install
+    /// time, so corrections in a newer NoorVox (e.g. Chatterbox's pace minimum, raised from 0 after 0 turned out to crash the
+    /// model) reach models that are already installed. Imported or unknown models fall back to their manifest.
+    /// </summary>
     public static ModelCapabilities For(PackageManifest manifest) =>
-        manifest.Capabilities ?? (manifest.Backend is null or "kokoro-onnx" ? Kokoro : new ModelCapabilities());
+        CatalogCapabilities(manifest.Id, manifest.Version)
+        ?? manifest.Capabilities
+        ?? (manifest.Backend is null or "kokoro-onnx" ? Kokoro : new ModelCapabilities());
+
+    static ModelCapabilities? CatalogCapabilities(string id, string version) =>
+        id.Length == 0 ? null : ModelCatalog.Embedded?.Models.FirstOrDefault(m => m.Id == id && m.Version == version)?.Capabilities;
 }

@@ -96,6 +96,8 @@ public sealed class KokoroBackend(Action<string>? log = null) : ITtsBackend, IBa
                 $"Speed {request.Speed} is outside Kokoro's supported range {MinSpeed}-{MaxSpeed}.");
         if (!string.IsNullOrWhiteSpace(request.Style))
             throw new NoorVoxException(ErrorCodes.Unsupported, ExitCode.InvalidArguments, "Kokoro does not take style directions.");
+        if (request.Emotion is not null || request.Pace is not null)
+            throw new NoorVoxException(ErrorCodes.Unsupported, ExitCode.InvalidArguments, "Kokoro has no emotion or pace control; use speed.");
 
         var voice = GetVoice(request.VoiceId);
         var sw = Stopwatch.StartNew();

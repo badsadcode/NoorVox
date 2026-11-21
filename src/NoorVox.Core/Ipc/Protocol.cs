@@ -36,7 +36,7 @@ public sealed record IpcError(string Code, string Message);
 
 public sealed record LoadParams(string ModelDirectory, Backends.BackendLoadOptions? Options = null);
 public sealed record SynthesizeParams(string Text, string VoiceId, double Speed, string OutputPath, bool Wait = true,
-    string? Style = null, long? Seed = null, string? Language = null);
+    string? Style = null, long? Seed = null, string? Language = null, double? Emotion = null, double? Pace = null);
 public sealed record ShutdownParams(bool Drain = true);
 
 public sealed record LoadedModelInfo(string Id, string Version, string ModelSha256, string Directory, DateTimeOffset LoadedAt, long LoadMs);

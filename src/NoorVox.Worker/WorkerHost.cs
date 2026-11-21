@@ -274,8 +274,8 @@ public sealed class WorkerHost(string workerId, string pipeName, string token, s
                 _lastActivity = DateTimeOffset.UtcNow;
             }
             log.Write($"synthesize req={requestId} chars={p.Text.Length} voice={p.VoiceId} speed={p.Speed}"
-                + (p.Style is null ? "" : $" style=\"{p.Style}\"") + (p.Seed is null ? "" : $" seed={p.Seed}") + (p.Language is null ? "" : $" language={p.Language}"));
-            var result = await _backend!.SynthesizeAsync(new SynthesisRequest(p.Text, p.VoiceId, p.Speed, p.Style, p.Seed, p.Language), p.OutputPath, _shutdown.Token);
+                + (p.Style is null ? "" : $" style=\"{p.Style}\"") + (p.Seed is null ? "" : $" seed={p.Seed}") + (p.Language is null ? "" : $" language={p.Language}") + (p.Emotion is null ? "" : $" emotion={p.Emotion}") + (p.Pace is null ? "" : $" pace={p.Pace}"));
+            var result = await _backend!.SynthesizeAsync(new SynthesisRequest(p.Text, p.VoiceId, p.Speed, p.Style, p.Seed, p.Language, p.Emotion, p.Pace), p.OutputPath, _shutdown.Token);
             lock (_gate) _jobsCompleted++;
             log.Write($"done req={requestId} audio={result.DurationMs} ms in {result.ElapsedMs} ms");
             return result;

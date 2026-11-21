@@ -131,6 +131,14 @@ This page shows installed models with their license, source, location, size and 
 **Install** downloads and verifies a model or voice pack, **Update to x.y** appears when a newer version exists (it installs alongside the old one),
 and **Verify files** re-hashes everything. **Change location…** moves where *new* installs go; existing files are not moved.
 
+### Chatterbox
+
+Chatterbox models (English, Multilingual, Turbo) speak in **your** voices: every cloned, designed or saved voice appears in their voice
+list, plus a built-in "Chatterbox default". English and Multilingual add an **Emotion** slider (flat → dramatic) and a gentle **Pace**
+slider (lower = a little slower); double-click a slider to reset it. Turbo has neither, but is about twice as fast. Chatterbox marks its
+audio with an inaudible watermark that identifies it as AI-generated; takes show "watermarked". It uses its own engine pack, installed
+automatically with the first Chatterbox model.
+
 ### Qwen3-TTS and engine packs
 
 Qwen models show **NVIDIA GPU**, **style directions**, **voice cloning** and **reproducible** labels. Installing one also installs the

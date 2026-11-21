@@ -100,7 +100,13 @@ Default: `<exports>\noorvox-support-<timestamp>.zip`. `data`: `path`, `bytes`.
 | `requiresGpu` | no | NVIDIA + CUDA | NVIDIA + CUDA | NVIDIA + CUDA |
 | `languages` | — (the voice decides) | `auto`, `english`, `chinese`, `japanese`, `korean`, `german`, `french`, `russian`, `portuguese`, `spanish`, `italian` | same | same |
 
-Catalog ids: `kokoro-82m`, `qwen3-tts-1.7b-customvoice`, `qwen3-tts-1.7b-base`, `qwen3-tts-0.6b-customvoice`, `qwen3-tts-0.6b-base`.
+Catalog ids: `kokoro-82m`, `qwen3-tts-1.7b-customvoice`, `qwen3-tts-1.7b-base`, `qwen3-tts-0.6b-customvoice`, `qwen3-tts-0.6b-base`,
+`qwen3-tts-1.7b-voicedesign`, `chatterbox-english`, `chatterbox-multilingual`, `chatterbox-turbo`.
+
+**Chatterbox** (Resemble AI, MIT; engine pack `chatterbox`): `cloning` is true for all three variants and needs only the profile's
+reference audio, no transcript; voice `default` is the model's own voice. English and Multilingual have `emotion` and `pace`;
+Turbo has neither (its code ignores them). Multilingual adds 23 `languages`. `watermark: "perth"`: every output carries Resemble
+AI's inaudible watermark, which `synth` reports as `data.watermark`.
 
 ### `noorvox models install <id[@version]> [--no-voices] [--no-engine]`
 Downloads from the catalog URL into `<cache>\staging`, resuming an interrupted download where it left off. It checks the
@@ -120,10 +126,11 @@ reported when it was installed: `python`, `torch`, `transformers`, `cuda`, `cuda
 
 | Engine | What it is | Needed for |
 |---|---|---|
+| `chatterbox` | Private Python 3.12.10 plus PyTorch 2.6 + CUDA 12.4 and chatterbox-tts 0.1.7 (hash-locked) | Chatterbox models (it pins an older PyTorch than Qwen, so it is a separate pack) |
 | `qwen-tts` | Private Python 3.12.10 (python.org NuGet package, sha256-checked) plus PyTorch 2.11 + CUDA 12.8, faster-qwen3-tts 0.5.4 and transformers 5.15.1 (~5.2 GB) | Qwen3-TTS models; also provides the CUDA/cuDNN DLLs for Kokoro on GPU |
 | `onnxruntime-cuda` | ONNX Runtime 1.22 GPU DLLs from the official NuGet package (~330 MB) | `gpu set --kokoro cuda` |
 
-### `noorvox engines install <qwen-tts|onnxruntime-cuda>`
+### `noorvox engines install <qwen-tts|chatterbox|onnxruntime-cuda>`
 Installs into `<models>\engines\<id>\<version>\`. Python engines run `pip install --require-hashes --no-deps --only-binary=:all:` with
 a lock embedded in NoorVox: every package is pinned to an exact version **and** its sha256, so nothing unverified is installed. pip's cache
 lives in `<cache>\pip`. The manifest `noorvox.engine.json` is written last, after an import + CUDA check; until then the engine counts as
@@ -254,7 +261,9 @@ Stopping a crashed (`error`) worker clears its stale record. `--graceful` is acc
 | `--speed X` | `1.0` | Kokoro: 0.5 – 2.0. Models without a speed control (Qwen) accept only 1.0 (`unsupported` otherwise). |
 | `--style TEXT` | — | Delivery directions, e.g. `"Calm, warm documentary narration. Speak slowly."` Only models with `capabilities.style` (Qwen CustomVoice 1.7B), or the voice description for VoiceDesign. Max 1,000 characters (NoorVox's cap; 1–3 concrete sentences work best). |
 | `--seed N` | random | 0 – 2147483647. Models with `capabilities.seed` (Qwen): the same seed, text, settings, GPU and engine give a byte-identical take. The seed used is always reported in `data.seed`. |
-| `--language NAME` | `auto` / profile language | Models with `capabilities.languages` (Qwen): `auto`, `english`, `chinese`, … |
+| `--language NAME` | `auto` / profile language | Models with `capabilities.languages`: Qwen `auto`, `english`, `chinese`, …; Chatterbox Multilingual one of its 23 languages (`english`, `german`, `polish`, …). |
+| `--emotion X` | model default (0.5) | Models with `capabilities.emotion` (Chatterbox English/Multilingual): emotion intensity `emotionMin`–`emotionMax` (0.25–2.0): low = flat and calm, high = dramatic. |
+| `--pace X` | model default (0.5) | Models with `capabilities.pace` (Chatterbox English/Multilingual): `paceMin`–`paceMax` (0–1); lower = slower, more deliberate delivery. Try `--emotion 0.7 --pace 0.3` for drama. |
 | `--model REF` | settings → first installed | e.g. `kokoro-82m`, `qwen3-tts-1.7b-customvoice@1.0` |
 | `--worker ID` | — | Use this specific worker; it is started (bound to this CLI call) if it isn't running. |
 | `--keep-worker` | off | Leave the worker running afterwards (persistent `default`, with the idle timeout). |
@@ -270,7 +279,7 @@ Stopping a crashed (`error`) worker clears its stale record. `--graceful` is acc
 **Output** (`data`): `outputPath`, `durationMs`, `durationSeconds`, `sampleRate` (24000), `channels` (1), `bitsPerSample` (16),
 `samples`, `bytes`, `text {chars, sha256}`, `voice`, `speed`, `model {id, version, modelSha256, license}`,
 `backend {id, executionProvider}`, `worker {id, reused, startedForRequest, stoppedAfter, stateAfter}`,
-`timings {synthesisMs, totalMs, realTimeFactor}`, `createdAt`, `generator`, `style`, `seed`, `language`, `voiceKind`
+`timings {synthesisMs, totalMs, realTimeFactor}`, `createdAt`, `generator`, `style`, `seed`, `language`, `emotion`, `pace`, `watermark`, `voiceKind`
 (`pack`/`blend`/`built-in`/`clone`) and, with `--manifest`, `manifestPath`. Qwen output is 24 kHz mono 16-bit, like Kokoro.
 
 Qwen models load in their engine's Python process (the worker's child, in the worker's kill-on-close Job Object). The first load of a 1.7B

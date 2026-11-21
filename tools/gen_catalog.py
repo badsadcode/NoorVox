@@ -9,6 +9,9 @@ import hashlib, json, os, sys, urllib.request
 
 voices_root, out = sys.argv[1], sys.argv[2]
 QWEN_ENGINE_BYTES = 6_000_000_000  # measured size of an installed qwen-tts engine (5.5 GB), rounded up
+CBX_ENGINE_BYTES = 6_000_000_000  # measured: the spike runtime was 5.4 GB, rounded up
+# Measured peak GPU memory allocated (RTX 3080, 2026-11-21): English 3.49 GB, Multilingual 3.49 GB, Turbo 3.09 GB; rounded up.
+CBX_VRAM = {"chatterbox-english": 4, "chatterbox-multilingual": 4, "chatterbox-turbo": 4}
 UA = {"User-Agent": "noorvox-gen-catalog"}
 
 
@@ -133,8 +136,76 @@ def qwen_model(name, rev, kind, vram):
 for q in QWEN:
     cat["models"].append(qwen_model(*q))
 
+# ---------------------------------------------------------------- Chatterbox (Resemble AI, MIT)
+# Each variant lists exactly the files its chatterbox-tts 0.1.7 loader reads (ChatterboxTTS / ChatterboxMultilingualTTS /
+# ChatterboxTurboTTS.from_local); the English repo also holds ~10 GB of other versions NoorVox doesn't download.
+CBX_REV = "5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18"          # ResembleAI/chatterbox, 2026-06-10
+CBX_TURBO_REV = "749d1c1a46eb10492095d68fbcf55691ccf137cd"    # ResembleAI/chatterbox-turbo, 2025-12-15
+CBX_LANGS = ["arabic", "danish", "german", "greek", "english", "spanish", "finnish", "french", "hebrew", "hindi", "italian",
+             "japanese", "korean", "malay", "dutch", "norwegian", "polish", "portuguese", "russian", "swedish", "swahili",
+             "turkish", "chinese"]
+CHATTERBOX = [  # id, display name, repo, revision, files, multilingual, sliders, description
+    ("chatterbox-english", "Chatterbox (English)", "ResembleAI/chatterbox", CBX_REV,
+     ["README.md", "ve.safetensors", "t3_cfg.safetensors", "s3gen.safetensors", "tokenizer.json", "conds.pt"], False, True,
+     "Resemble AI's Chatterbox: natural English voices with an emotion-intensity slider and a pace control. Speaks in any of your "
+     "voices (clones, designed, saved) from the reference audio alone. Output carries an inaudible watermark. Needs an NVIDIA GPU."),
+    ("chatterbox-multilingual", "Chatterbox Multilingual", "ResembleAI/chatterbox", CBX_REV,
+     ["README.md", "ve.pt", "t3_mtl23ls_v2.safetensors", "s3gen.pt", "grapheme_mtl_merged_expanded_v1.json", "Cangjie5_TC.json", "conds.pt"], True, True,
+     "Chatterbox in 23 languages (incl. German, French, Spanish, Polish, Japanese, Chinese) with emotion and pace controls. "
+     "Uses your voices from their reference audio. Watermarked output. Needs an NVIDIA GPU."),
+    ("chatterbox-turbo", "Chatterbox Turbo", "ResembleAI/chatterbox-turbo", CBX_TURBO_REV,
+     ["README.md", "ve.safetensors", "t3_turbo_v1.safetensors", "t3_turbo_v1.yaml", "s3gen_meanflow.safetensors", "conds.pt",
+      "added_tokens.json", "merges.txt", "special_tokens_map.json", "tokenizer_config.json", "vocab.json"], False, False,
+     "Chatterbox Turbo: a faster, distilled English model. No emotion or pace controls (the model ignores them). Uses your voices "
+     "from their reference audio. Watermarked output. Needs an NVIDIA GPU."),
+]
+
+
+def chatterbox_model(mid, name, repo, rev, wanted, multilingual, sliders, desc):
+    tree = {e["path"]: e for e in json.loads(fetch(f"https://huggingface.co/api/models/{repo}/tree/{rev}?recursive=1")) if e["type"] == "file"}
+    files, downloads = [], []
+    for path in wanted:
+        e = tree[path]
+        url = f"https://huggingface.co/{repo}/resolve/{rev}/{path}"
+        digest = e["lfs"]["oid"] if e.get("lfs") else hashlib.sha256(fetch(url)).hexdigest()
+        files.append({"path": path, "size": e["size"], "sha256": digest})
+        downloads.append({"url": url, "size": e["size"], "sha256": digest, "kind": "file", "target": path})
+    caps = {"speed": False, "minSpeed": 1.0, "maxSpeed": 1.0, "style": False, "cloning": True, "design": False, "blending": False,
+            "seed": True, "requiresGpu": True, "languages": CBX_LANGS if multilingual else [],
+            "emotion": sliders, "emotionMin": 0.25 if sliders else 0, "emotionMax": 2.0 if sliders else 0, "emotionDefault": 0.5 if sliders else 0,
+            # pace = cfg_weight. 0.0 crashes chatterbox-tts 0.1.7 (tensor size mismatch), so the range starts at 0.1.
+            # Measured (English, 3 seeds): 0.1 → 8.85 s, 0.5 → 8.11 s, 1.0 → 7.87 s for the same text: lower is slower, gently.
+            "pace": sliders, "paceMin": 0.1 if sliders else 0, "paceMax": 1.0 if sliders else 0, "paceDefault": 0.5 if sliders else 0,
+            "watermark": "perth"}
+    m = {"id": mid, "version": "1.0", "displayName": name, "description": desc, "backend": "chatterbox", "recommended": False,
+         "license": "MIT", "licenseUrl": f"https://huggingface.co/{repo}", "source": f"https://huggingface.co/{repo}/tree/{rev}",
+         "defaultVoice": "default", "sampleRate": 24000, "defaultVoicePacks": [], "downloads": downloads, "files": files,
+         "capabilities": caps, "engine": "chatterbox", "family": "chatterbox", "minVramGb": CBX_VRAM.get(mid),
+         "builtInVoices": [{"id": "default", "displayName": "Chatterbox default", "gender": "unknown", "language": "english" if not multilingual else "auto",
+                            "description": "The voice that ships with the model. Pick one of your voices for anything else."}]}
+    print(mid, len(files), "files", sum(f["size"] for f in files), "bytes", file=sys.stderr)
+    return m
+
+
+for c in CHATTERBOX:
+    cat["models"].append(chatterbox_model(*c))
+
 ORT = "runtimes/win-x64/native/"
 cat["engines"] = [
+  {
+    "id": "chatterbox", "version": "1.0", "kind": "python",
+    "displayName": "Chatterbox engine (PyTorch + CUDA)",
+    "description": "A private Python 3.12 with PyTorch 2.6 (CUDA 12.4) and Resemble AI's chatterbox-tts 0.1.7, installed from a hash-locked list. Needed by Chatterbox voices (it pins an older PyTorch than Qwen, so it is a separate pack).",
+    "license": "PSF-2.0 (Python), BSD-3-Clause (PyTorch), MIT (chatterbox-tts, resemble-perth); NVIDIA CUDA/cuDNN under NVIDIA's EULA (inside the PyTorch wheel)",
+    "licenseUrl": "https://github.com/resemble-ai/chatterbox", "source": "https://www.nuget.org/packages/python/3.12.10 + PyPI + download.pytorch.org (cu124)",
+    "downloads": [{"url": "https://api.nuget.org/v3-flatcontainer/python/3.12.10/python.3.12.10.nupkg", "size": 14515433,
+                   "sha256": "0eb85c2dfccccf1b17352de4c397f69194035b7d37149eacc16f1147d93de3b8", "kind": "zip-tree", "target": "python", "prefix": "tools/"}],
+    "files": [], "lock": "chatterbox.lock",
+    "pipIndexUrls": ["https://pypi.org/simple", "https://download.pytorch.org/whl/cu124"],
+    "approxInstallBytes": CBX_ENGINE_BYTES, "requires": [],
+    # perth's implicit watermarker fails to import without pkg_resources, and Chatterbox can't start without it: check it here.
+    "verifyImports": ["chatterbox.tts", "chatterbox.tts_turbo", "chatterbox.mtl_tts", "perth.perth_net.perth_net_implicit.perth_watermarker"],
+  },
   {
     "id": "qwen-tts", "version": "1.0", "kind": "python",
     "displayName": "Qwen3-TTS engine (PyTorch + CUDA)",
@@ -147,6 +218,7 @@ cat["engines"] = [
     "files": [], "lock": "qwen-tts.lock",
     "pipIndexUrls": ["https://pypi.org/simple", "https://download.pytorch.org/whl/cu128"],
     "approxInstallBytes": QWEN_ENGINE_BYTES, "requires": [],
+    "verifyImports": ["faster_qwen3_tts", "transformers"],
   },
   {
     "id": "onnxruntime-cuda", "version": "1.22.0", "kind": "native",

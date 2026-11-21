@@ -94,10 +94,42 @@ public class QwenTests : IDisposable
     }
 
     [Fact]
+    public void Without_a_default_the_recommended_model_wins_over_alphabetical_order()
+    {
+        using var home = new TestHome();
+        var s = home.Storage();
+        foreach (var (id, backend) in new[] { ("chatterbox-english", "chatterbox"), ("kokoro-82m", "kokoro-onnx") })
+        {
+            var dir = Path.Combine(s.ModelsDir, id, "1.0");
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(Path.Combine(dir, ModelRegistry.ModelManifestName),
+                Json.Serialize(new PackageManifest { Id = id, Version = "1.0", Backend = backend, Files = [new("model.safetensors", 1, new string('a', 64))] }));
+        }
+        Assert.Equal("kokoro-82m", new ModelRegistry(s).Resolve(null).Id); // "chatterbox-english" sorts first but must not become the default
+    }
+
+    [Fact]
+    public void Catalog_capabilities_override_a_stale_installed_manifest()
+    {
+        // Installed before the pace minimum was corrected: the manifest still says 0, which crashes Chatterbox.
+        var stale = new PackageManifest
+        {
+            Id = "chatterbox-english", Version = "1.0", Backend = "chatterbox",
+            Capabilities = new ModelCapabilities { Cloning = true, Pace = true, PaceMin = 0.0, PaceMax = 1.0, Emotion = true, EmotionMin = 0.25, EmotionMax = 2.0 },
+        };
+        Assert.Equal(0.1, ModelCapabilities.For(stale).PaceMin);
+        var unknown = new PackageManifest { Id = "somebody-elses-model", Version = "1.0", Backend = "chatterbox", Capabilities = new ModelCapabilities { PaceMin = 0.0 } };
+        Assert.Equal(0.0, ModelCapabilities.For(unknown).PaceMin);   // not in the catalog: the manifest stays the authority
+    }
+
+    [Fact]
     public void Old_kokoro_manifests_keep_their_capabilities_and_primary_file()
     {
         var m = new PackageManifest { Id = "kokoro-82m", Version = "1.0", Files = [new("kokoro.onnx", 1, new string('a', 64))] };
-        Assert.Equal(ModelCapabilities.Kokoro, ModelCapabilities.For(m));
+        var k = ModelCapabilities.For(m);   // the catalog's Kokoro entry (it knows kokoro-82m@1.0)
+        Assert.Equal((true, 0.5, 2.0, true, false), (k.Speed, k.MinSpeed, k.MaxSpeed, k.Blending, k.Style));
+        var unknownOld = new PackageManifest { Id = "old-kokoro-import", Version = "0.9", Backend = "kokoro-onnx" };
+        Assert.Same(ModelCapabilities.Kokoro, ModelCapabilities.For(unknownOld)); // not in the catalog, no block: the built-in Kokoro fallback
         var q = WriteModel(QwenManifest("qwen-x", CustomCaps));
         Assert.Equal("model.safetensors", q.PrimaryFile.Path);
         Assert.Equal(new string('b', 64), q.ModelSha256);

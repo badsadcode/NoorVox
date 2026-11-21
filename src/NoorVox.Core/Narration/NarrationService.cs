@@ -20,6 +20,10 @@ public sealed record NarrationRequest
     public long? Seed { get; init; }
     /// <summary>Language option for engines that take one (Qwen: auto, english, ...).</summary>
     public string? Language { get; init; }
+    /// <summary>Emotion intensity (Chatterbox). null = the model's default.</summary>
+    public double? Emotion { get; init; }
+    /// <summary>Pace guidance (Chatterbox). null = the model's default.</summary>
+    public double? Pace { get; init; }
     public string? Model { get; init; }
     public required string OutputPath { get; init; }
     public bool Overwrite { get; init; }
@@ -47,7 +51,8 @@ public sealed record NarrationResult(
     string OutputPath, long DurationMs, double DurationSeconds, int SampleRate, int Channels, int BitsPerSample, long Samples, long Bytes,
     TextInfo Text, string Voice, double Speed, ModelProvenance Model, BackendProvenance Backend, WorkerUsage Worker,
     NarrationTimings Timings, DateTimeOffset CreatedAt, string Generator, string? ManifestPath = null,
-    string? Style = null, long? Seed = null, string? Language = null, string VoiceKind = "pack");
+    string? Style = null, long? Seed = null, string? Language = null, string VoiceKind = "pack",
+    double? Emotion = null, double? Pace = null, string? Watermark = null);
 
 /// <summary>
 /// Text → validated WAV at a chosen path, with provenance. Shared by the CLI (<c>noorvox synth</c>) and NoorVox Studio,
@@ -70,6 +75,7 @@ public sealed class NarrationService(StorageContext storage, WorkerSupervisor su
             throw new NoorVoxException(ErrorCodes.VoiceNotFound, ExitCode.ModelMissing, $"Voice '{voiceId}' is not installed for {model.Reference}.",
                 new { voiceId, hint = $"noorvox voices list --model {model.Reference}" });
         CheckCapabilities(model, req.Speed, req.Style, req.Seed, req.Language);
+        CheckSliders(model, req.Emotion, req.Pace);
 
         var outPath = Path.GetFullPath(req.OutputPath);
         if (!outPath.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
@@ -93,7 +99,7 @@ public sealed class NarrationService(StorageContext storage, WorkerSupervisor su
             progress?.Invoke($"Synthesizing {text.Length} chars with {voiceId} on worker '{workerId}'...");
             var style = string.IsNullOrWhiteSpace(req.Style) ? null : req.Style.Trim();
             result = await supervisor.SynthesizeAsync(workerId, new SynthesizeParams(text, voiceId, req.Speed, tempWav,
-                Style: style, Seed: req.Seed, Language: req.Language), ct);
+                Style: style, Seed: req.Seed, Language: req.Language, Emotion: req.Emotion, Pace: req.Pace), ct);
         }
         catch
         {
@@ -126,7 +132,10 @@ public sealed class NarrationService(StorageContext storage, WorkerSupervisor su
             new NarrationTimings(result.ElapsedMs, total.ElapsedMilliseconds, Math.Round(result.ElapsedMs / Math.Max(1.0, info.DurationMs), 3)),
             DateTimeOffset.Now, $"NoorVox {NoorVoxInfo.Version}",
             Style: string.IsNullOrWhiteSpace(req.Style) ? null : req.Style.Trim(), Seed: result.Seed, Language: req.Language,
-            VoiceKind: ModelVoices.Describe(model, voiceId, model.Voices.First(v => v.VoiceId == voiceId).PackId).Kind);
+            VoiceKind: ModelVoices.Describe(model, voiceId, model.Voices.First(v => v.VoiceId == voiceId).PackId).Kind,
+            Emotion: model.Capabilities.Emotion ? req.Emotion ?? model.Capabilities.EmotionDefault : null,
+            Pace: model.Capabilities.Pace ? req.Pace ?? model.Capabilities.PaceDefault : null,
+            Watermark: model.Capabilities.Watermark);
 
         if (req.WriteManifest)
         {
@@ -167,6 +176,25 @@ public sealed class NarrationService(StorageContext storage, WorkerSupervisor su
             throw new NoorVoxException(caps.Languages.Count == 0 ? ErrorCodes.Unsupported : ErrorCodes.InvalidArguments, ExitCode.InvalidArguments,
                 caps.Languages.Count == 0 ? $"{name} takes its language from the voice; there is no language option."
                     : $"Language '{language}' is not supported by {name}. Use one of: {string.Join(", ", caps.Languages)}.");
+    }
+
+    /// <summary>Emotion and pace exist only where the model has them, within its own range.</summary>
+    public static void CheckSliders(InstalledModel model, double? emotion, double? pace)
+    {
+        var caps = model.Capabilities;
+        string name = model.Manifest.DisplayName;
+        if (emotion is { } e)
+        {
+            if (!caps.Emotion) throw new NoorVoxException(ErrorCodes.Unsupported, ExitCode.InvalidArguments, $"{name} has no emotion control.");
+            if (e < caps.EmotionMin || e > caps.EmotionMax)
+                throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, $"Emotion must be between {caps.EmotionMin} and {caps.EmotionMax} for {name}.");
+        }
+        if (pace is { } p)
+        {
+            if (!caps.Pace) throw new NoorVoxException(ErrorCodes.Unsupported, ExitCode.InvalidArguments, $"{name} has no pace control.");
+            if (p < caps.PaceMin || p > caps.PaceMax)
+                throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, $"Pace must be between {caps.PaceMin} and {caps.PaceMax} for {name}.");
+        }
     }
 
     static void TryDelete(string path)

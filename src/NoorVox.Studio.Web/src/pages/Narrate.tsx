@@ -34,6 +34,8 @@ export function Narrate() {
   const [style, setStyle] = useState(() => load(STYLE_KEY) ?? "");
   const [language, setLanguage] = useState(() => load(LANG_KEY) ?? "auto");
   const [seedLocked, setSeedLocked] = useState(false);
+  const [emotion, setEmotion] = useState<number | null>(null); // null = the model's default
+  const [pace, setPace] = useState<number | null>(null);
   const [seed, setSeed] = useState<number | null>(null);
   const [cloning, setCloning] = useState(false);
   const [keeping, setKeeping] = useState<Take | null>(null);
@@ -123,7 +125,9 @@ export function Narrate() {
         speed: caps?.speed ? speed : 1,
         style: (caps?.style || caps?.design) && style.trim() ? style.trim() : null,
         seed: caps?.seed && seedLocked && seed != null ? seed : null,
-        language: caps?.languages.length ? language : null,
+        language: caps?.languages.length ? (caps.languages.includes(language) ? language : null) : null,
+        emotion: caps?.emotion ? emotion ?? caps.emotionDefault : null,
+        pace: caps?.pace ? pace ?? caps.paceDefault : null,
       });
       if (r.result.seed != null && !seedLocked) setSeed(r.result.seed);
       const take: Take = { key: r.result.outputPath, text: spoken, voice, mediaUrl: r.mediaUrl, result: r.result };
@@ -137,7 +141,7 @@ export function Narrate() {
       setBusySince(null);
       refreshWorkers();
     }
-  }, [voiceId, speed, busy, voice, play, notify, refreshWorkers, voices?.model, caps, style, seedLocked, seed, language]);
+  }, [voiceId, speed, busy, voice, play, notify, refreshWorkers, voices?.model, caps, style, seedLocked, seed, language, emotion, pace]);
 
   const exportTake = async (take: Take) => {
     try {
@@ -251,6 +255,24 @@ export function Narrate() {
                   : "e.g. Calm, warm documentary narration with a hint of humour. Speak slowly."} />
             </>}
 
+            {caps?.emotion && (() => { const v = emotion ?? caps.emotionDefault ?? 0.5; return <>
+              <div className="speed-row" style={{ marginTop: 14 }}>
+                <label className="field" htmlFor="emotion">Emotion</label>
+                <span className="mono">{v.toFixed(2)} {v < 0.4 ? "· calm" : v > 1.0 ? "· dramatic" : ""}</span>
+              </div>
+              <input id="emotion" type="range" min={caps.emotionMin} max={caps.emotionMax} step={0.05} value={v}
+                onChange={(e) => setEmotion(Number(e.target.value))} onDoubleClick={() => setEmotion(null)} />
+            </>; })()}
+
+            {caps?.pace && (() => { const v = pace ?? caps.paceDefault ?? 0.5; return <>
+              <div className="speed-row" style={{ marginTop: 10 }}>
+                <label className="field" htmlFor="pace" title="Chatterbox's guidance weight: lower is slower and more deliberate">Pace</label>
+                <span className="mono">{v.toFixed(2)} {v < 0.35 ? "· a little slower" : v > 0.7 ? "· a little brisker" : ""}</span>
+              </div>
+              <input id="pace" type="range" min={caps.paceMin} max={caps.paceMax} step={0.05} value={v}
+                onChange={(e) => setPace(Number(e.target.value))} onDoubleClick={() => setPace(null)} />
+            </>; })()}
+
             {!!caps?.languages.length && <>
               <label className="field" htmlFor="language" style={{ marginTop: 12 }}>Language</label>
               <select id="language" value={language} onChange={(e) => setLanguage(e.target.value)}>
@@ -271,12 +293,15 @@ export function Narrate() {
             <p className="note" style={{ marginTop: 12 }}>
               {caps == null ? "Loading…"
                 : caps.speed && !caps.style ? "This model offers voice and speed. Pitch, emotion and style aren't controls in it, so NoorVox doesn't pretend they are."
+                : caps.emotion ? "Chatterbox: emotion goes from flat to dramatic; pace is gentle (lower is a little slower). Double-click a slider to reset. For more drama, try emotion 0.7+ with pace 0.3."
+                : caps.watermark ? "This model has no emotion or pace controls; the voice comes from the reference."
                 : caps.design ? "VoiceDesign invents a voice from your description on every take. Keep one you like as a permanent voice (on its take, or in the Voice lab)."
                 : caps.style ? "Qwen follows written directions instead of sliders: describe the pace, mood and delivery. It has no speed control."
                 : caps.cloning ? "This model has no speed or style controls; the voice comes from the recording."
                 : "This model has no speed or style controls."}
               {caps?.requiresGpu && " Runs on your NVIDIA GPU."}
-              {caps?.requiresGpu && !modelLoaded && " Not loaded yet: the first line takes a few minutes (see below), then it's quick."}
+              {caps?.watermark && " Its audio carries an inaudible AI watermark."}
+              {caps?.requiresGpu && !modelLoaded && " Not loaded yet: the first line also loads the model (a few minutes from a hard drive); after that it stays loaded."}
             </p>
           </section>
 
@@ -325,6 +350,8 @@ export function Narrate() {
               <div className="take-meta">
                 <span><b style={{ color: "var(--text)" }}>{fmtDuration(t.result.durationMs)}</b> measured</span>
                 <span>{t.voice?.displayName ?? t.result.voice}{t.result.voiceKind === "clone" ? " (cloned)" : ""} · {t.result.speed.toFixed(2)}×</span>
+                {t.result.emotion != null && <span>emotion {t.result.emotion.toFixed(2)} · pace {t.result.pace?.toFixed(2)}</span>}
+                {t.result.watermark && <span title="The engine adds an inaudible watermark that marks the audio as AI-generated">watermarked</span>}
                 {t.result.style && <span title={t.result.style}>style: “{t.result.style.length > 40 ? t.result.style.slice(0, 40) + "…" : t.result.style}”</span>}
                 {t.result.seed != null && (
                   <button className="linkish mono" title="Use this seed for the next take" onClick={() => { setSeed(t.result.seed!); setSeedLocked(true); }}>

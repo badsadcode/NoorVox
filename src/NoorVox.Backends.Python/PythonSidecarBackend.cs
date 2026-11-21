@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using NoorVox.Core;
 using NoorVox.Core.Audio;
@@ -10,28 +9,36 @@ using NoorVox.Core.Ipc;
 using NoorVox.Core.Models;
 using NoorVox.Core.Workers;
 
-namespace NoorVox.Backends.Qwen;
+namespace NoorVox.Backends.Python;
 
 /// <summary>
-/// Qwen3-TTS via the qwen-tts engine pack (ADR-0002). Inference runs in a Python sidecar started from the engine's
-/// private Python; this class only launches it, speaks JSON lines over its stdin/stdout and checks the WAV it writes.
-/// The sidecar is in a kill-on-close Job Object owned by this worker, and exits on stdin EOF, so it never outlives the worker.
+/// Shared machinery for engines that run in Python (ADR-0002): the worker starts the engine pack's private Python with a
+/// sidecar script, speaks JSON lines over its stdin/stdout, and checks the WAV it writes. The sidecar sits in a kill-on-close
+/// Job Object owned by the worker and exits on stdin EOF, so it never outlives the worker. Engines only say how to build a
+/// synthesis request (<see cref="BuildSynthRequest"/>); everything else — start-up, load stages, GPU numbers, errors,
+/// shutdown — is here. Protocol: <c>engines/common/noorvox_sidecar.py</c>.
 /// </summary>
-public sealed class QwenBackend(Action<string> log) : ITtsBackend, IBackendResources
+public abstract class PythonSidecarBackend(Action<string> log) : ITtsBackend, IBackendResources
 {
     static readonly TimeSpan StartTimeout = TimeSpan.FromMinutes(5);  // a cold `import torch` from a busy HDD is slow
     readonly SemaphoreSlim _io = new(1, 1);
     Process? _proc;
     JobObject? _job;
-    InstalledModel? _model;
-    string _version = "faster-qwen3-tts (engine not started)";
     GpuMemoryInfo? _gpu;
     long _requestNo;
+    string _version = "";
 
-    public string BackendId => "qwen3-tts";
-    public string BackendVersion => _version;
-    public string ExecutionProvider => _model is null ? "" : "CUDA";
-    public bool IsLoaded => _model is not null;
+    /// <summary>Shown in logs and messages, e.g. "Qwen3-TTS".</summary>
+    protected abstract string EngineName { get; }
+    /// <summary>The engine pack id the user would install, e.g. <c>qwen-tts</c>.</summary>
+    protected abstract string EnginePackId { get; }
+    protected Action<string> Log { get; } = log;
+    protected InstalledModel? Model { get; private set; }
+
+    public abstract string BackendId { get; }
+    public string BackendVersion => _version.Length > 0 ? _version : $"{EngineName} (engine not started)";
+    public string ExecutionProvider => Model is null ? "" : "CUDA";
+    public bool IsLoaded => Model is not null;
     public GpuMemoryInfo? Gpu => _gpu;
     public string? ProviderNote => null;
     public string? LoadStage { get; private set; }
@@ -46,32 +53,40 @@ public sealed class QwenBackend(Action<string> log) : ITtsBackend, IBackendResou
             {
                 if (p.HasExited) return null;
                 p.Refresh();
-                return new SidecarInfo(p.Id, "Qwen3-TTS engine (Python)", p.WorkingSet64, p.PrivateMemorySize64, DateTimeOffset.UtcNow);
+                return new SidecarInfo(p.Id, $"{EngineName} engine (Python)", p.WorkingSet64, p.PrivateMemorySize64, DateTimeOffset.UtcNow);
             }
             catch (InvalidOperationException) { return null; }
         }
     }
 
+    /// <summary>Builds the engine-specific <c>synth</c> message (mode, voice, controls). Validation of controls belongs here too.</summary>
+    protected abstract JsonObject BuildSynthRequest(InstalledModel model, SynthesisRequest request, long seed);
+
+    /// <summary>Extra fields for the <c>load</c> message (e.g. which model class to use).</summary>
+    protected virtual void AddLoadFields(InstalledModel model, JsonObject load) { }
+
     public async Task LoadAsync(InstalledModel model, BackendLoadOptions options, CancellationToken ct)
     {
-        if (_model is not null) throw new InvalidOperationException("A model is already loaded; recycle the worker to change models.");
+        if (Model is not null) throw new InvalidOperationException("A model is already loaded; recycle the worker to change models.");
         if (options.EngineDirectory is null || options.SidecarScript is null)
-            throw new NoorVoxException(ErrorCodes.EngineNotInstalled, ExitCode.ModelMissing, "The qwen-tts engine pack is not installed.");
+            throw new NoorVoxException(ErrorCodes.EngineNotInstalled, ExitCode.ModelMissing, $"The {EnginePackId} engine pack is not installed.");
         var python = Path.Combine(options.EngineDirectory, "python", "python.exe");
         if (!File.Exists(python))
-            throw new NoorVoxException(ErrorCodes.EngineBroken, ExitCode.WorkerError, $"Engine Python not found: {python}. Reinstall the qwen-tts engine.");
+            throw new NoorVoxException(ErrorCodes.EngineBroken, ExitCode.WorkerError, $"Engine Python not found: {python}. Reinstall the {EnginePackId} engine.");
 
         LoadStage = "Starting Python and PyTorch";
         try
         {
             await StartSidecarAsync(python, options, ct);
             LoadStage = "Reading the model from disk";
-            var reply = await CallAsync(new JsonObject { ["op"] = "load", ["modelDir"] = model.Directory, ["warmup"] = true }, ct);
+            var load = new JsonObject { ["op"] = "load", ["modelDir"] = model.Directory, ["warmup"] = true };
+            AddLoadFields(model, load);
+            var reply = await CallAsync(load, ct);
             ReadGpu(reply);
-            log($"qwen model loaded: load {reply["loadMs"]} ms, CUDA graph warm-up {reply["warmupMs"]} ms");
+            Log($"{EngineName} model loaded: load {reply["loadMs"]} ms, warm-up {reply["warmupMs"]} ms");
         }
         finally { LoadStage = null; }
-        _model = model;
+        Model = model;
     }
 
     async Task StartSidecarAsync(string python, BackendLoadOptions options, CancellationToken ct)
@@ -103,14 +118,15 @@ public sealed class QwenBackend(Action<string> log) : ITtsBackend, IBackendResou
 
         _job = new JobObject();
         _proc = Process.Start(psi) ?? throw new NoorVoxException(ErrorCodes.EngineBroken, ExitCode.WorkerError, $"Could not start {python}.");
-        if (!_job.Assign(_proc.Handle)) log($"warning: could not put the Qwen engine (PID {_proc.Id}) in the worker's job object");
-        log($"qwen engine started: PID {_proc.Id}");
+        if (!_job.Assign(_proc.Handle)) Log($"warning: could not put the {EngineName} engine (PID {_proc.Id}) in the worker's job object");
+        Log($"{EngineName} engine started: PID {_proc.Id}");
+        var proc = _proc;
         _ = Task.Run(async () =>
         {
             try
             {
-                while (await _proc.StandardError.ReadLineAsync() is { } line)
-                    if (line.Length > 0) log("qwen: " + line);
+                while (await proc.StandardError.ReadLineAsync() is { } line)
+                    if (line.Length > 0) Log($"{BackendId}: {line}");
             }
             catch (Exception) { /* process gone */ }
         });
@@ -121,58 +137,26 @@ public sealed class QwenBackend(Action<string> log) : ITtsBackend, IBackendResou
         try { ready = await ReadMessageAsync(timeout.Token); }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            throw new NoorVoxException(ErrorCodes.EngineBroken, ExitCode.WorkerError, $"The Qwen engine did not start within {StartTimeout.TotalMinutes:0} minutes.");
+            throw new NoorVoxException(ErrorCodes.EngineBroken, ExitCode.WorkerError, $"The {EngineName} engine did not start within {StartTimeout.TotalMinutes:0} minutes.");
         }
         if (ready["ok"]?.GetValue<bool>() != true) throw ToException(ready);
-        _version = $"faster-qwen3-tts; PyTorch {ready["torch"]} (CUDA {ready["cudaVersion"]}); Python {ready["python"]}";
+        _version = $"{ready["engine"]}; PyTorch {ready["torch"]} (CUDA {ready["cudaVersion"]}); Python {ready["python"]}";
         if (ready["cuda"]?.GetValue<bool>() != true)
-            throw new NoorVoxException(ErrorCodes.GpuRequired, ExitCode.WorkerError, "Qwen3-TTS needs an NVIDIA GPU with CUDA; PyTorch sees none on this PC.");
-        log($"qwen engine ready: {_version}; device {ready["device"]}");
+            throw new NoorVoxException(ErrorCodes.GpuRequired, ExitCode.WorkerError, $"{EngineName} needs an NVIDIA GPU with CUDA; PyTorch sees none on this PC.");
+        Log($"{EngineName} engine ready: {_version}; device {ready["device"]}");
     }
 
     public async Task<SynthesisResult> SynthesizeAsync(SynthesisRequest request, string outputWavPath, CancellationToken ct)
     {
-        if (_model is null) throw new InvalidOperationException("No model loaded.");
+        if (Model is null) throw new InvalidOperationException("No model loaded.");
         if (string.IsNullOrWhiteSpace(request.Text))
             throw new NoorVoxException(ErrorCodes.InvalidInput, ExitCode.InvalidInput, "Text is empty.");
-        var caps = _model.Capabilities;
-        if (Math.Abs(request.Speed - 1.0) > 1e-9)
-            throw new NoorVoxException(ErrorCodes.Unsupported, ExitCode.InvalidArguments, "Qwen3-TTS has no speed control; ask for a pace in the style instead.");
-        if (!string.IsNullOrWhiteSpace(request.Style) && !caps.Style && !caps.Design)
-            throw new NoorVoxException(ErrorCodes.Unsupported, ExitCode.InvalidArguments, $"{_model.Manifest.DisplayName} does not take style directions.");
-        if (caps.Design && string.IsNullOrWhiteSpace(request.Style))
-            throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "VoiceDesign needs a description of the voice.");
-
         var seed = request.Seed ?? RandomNumberGenerator.GetInt32(0, int.MaxValue);
-        var msg = new JsonObject { ["op"] = "synth", ["text"] = request.Text, ["seed"] = seed, ["out"] = Path.GetFullPath(outputWavPath) };
-        string language;
-        if (caps.Design)
-        {
-            msg["mode"] = "design";
-            msg["instruct"] = request.Style!.Trim(); // the description *is* the voice
-            language = request.Language ?? "auto";
-        }
-        else if (caps.Cloning)
-        {
-            var profile = FindProfile(request.VoiceId);
-            msg["mode"] = "clone";
-            msg["refAudio"] = profile.ReferencePath;
-            msg["refText"] = profile.Transcript;
-            language = request.Language ?? profile.Language;
-        }
-        else
-        {
-            if (_model.Manifest.BuiltInVoices?.Any(v => v.Id == request.VoiceId) != true)
-                throw new NoorVoxException(ErrorCodes.VoiceNotFound, ExitCode.ModelMissing, $"'{request.VoiceId}' is not a speaker of {_model.Reference}.");
-            msg["mode"] = "custom";
-            msg["speaker"] = request.VoiceId;
-            if (!string.IsNullOrWhiteSpace(request.Style)) msg["instruct"] = request.Style.Trim();
-            language = request.Language ?? "auto";
-        }
-        if (caps.Languages.Count > 0 && !caps.Languages.Contains(language))
-            throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments,
-                $"Language '{language}' is not supported. Use one of: {string.Join(", ", caps.Languages)}.");
-        msg["language"] = language == "auto" ? "Auto" : char.ToUpperInvariant(language[0]) + language[1..];
+        var msg = BuildSynthRequest(Model, request, seed);
+        msg["op"] = "synth";
+        msg["text"] = request.Text;
+        msg["seed"] = seed;
+        msg["out"] = Path.GetFullPath(outputWavPath);
 
         var sw = Stopwatch.StartNew();
         var reply = await CallAsync(msg, ct);
@@ -183,23 +167,36 @@ public sealed class QwenBackend(Action<string> log) : ITtsBackend, IBackendResou
             sw.ElapsedMilliseconds, seed);
     }
 
-    VoiceProfile FindProfile(string voiceId)
+    /// <summary>Validates the language against the model's list and returns it (default <c>auto</c>).</summary>
+    protected static string CheckLanguage(InstalledModel model, string? requested, string fallback = "auto")
     {
-        var p = _model!.Profiles?.FirstOrDefault(x => x.VoiceId == voiceId);
+        var language = requested ?? fallback;
+        var langs = model.Capabilities.Languages;
+        if (langs.Count > 0 && !langs.Contains(language))
+            throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments,
+                $"Language '{language}' is not supported. Use one of: {string.Join(", ", langs)}.");
+        return language;
+    }
+
+    protected VoiceProfile FindProfile(string voiceId)
+    {
+        var p = Model!.Profiles?.FirstOrDefault(x => x.VoiceId == voiceId);
         if (p is null && VoiceProfiles.IsValidId(voiceId))
         {
-            _model = ModelRegistry.ReadPackage(_model.Directory); // a profile created after this worker loaded the model
-            p = _model.Profiles?.FirstOrDefault(x => x.VoiceId == voiceId);
+            Model = ModelRegistry.ReadPackage(Model.Directory); // a profile created after this worker loaded the model
+            p = Model.Profiles?.FirstOrDefault(x => x.VoiceId == voiceId);
         }
         return p ?? throw new NoorVoxException(ErrorCodes.VoiceNotFound, ExitCode.ModelMissing, $"No voice profile '{voiceId}'.", new { voiceId });
     }
+
+    protected static NoorVoxException Unsupported(string message) => new(ErrorCodes.Unsupported, ExitCode.InvalidArguments, message);
 
     void ReadGpu(JsonObject reply)
     {
         if (reply["vram"] is not JsonObject v) return;
         _gpu = new GpuMemoryInfo(v["device"]?.GetValue<string>() ?? "", v["allocatedBytes"]!.GetValue<long>(), v["reservedBytes"]!.GetValue<long>(),
             v["peakAllocatedBytes"]!.GetValue<long>(), v["deviceFreeBytes"]!.GetValue<long>(), v["deviceTotalBytes"]!.GetValue<long>(),
-            "Qwen engine (torch.cuda), sampled after the last load/synthesis", DateTimeOffset.Parse(v["sampledAt"]!.GetValue<string>()));
+            $"{EngineName} engine (torch.cuda), sampled after the last load/synthesis", DateTimeOffset.Parse(v["sampledAt"]!.GetValue<string>()));
     }
 
     async Task<JsonObject> CallAsync(JsonObject request, CancellationToken ct)
@@ -219,7 +216,7 @@ public sealed class QwenBackend(Action<string> log) : ITtsBackend, IBackendResou
                 KillSidecar("cancelled"); // a generation can't be interrupted inside the engine
                 throw;
             }
-            if (reply["id"]?.GetValue<string>() != id) throw new InvalidDataException("Qwen engine reply out of order.");
+            if (reply["id"]?.GetValue<string>() != id) throw new InvalidDataException($"{EngineName} engine reply out of order.");
             if (reply["ok"]?.GetValue<bool>() != true) throw ToException(reply);
             return reply;
         }
@@ -234,30 +231,30 @@ public sealed class QwenBackend(Action<string> log) : ITtsBackend, IBackendResou
             if (line is null)
             {
                 var exit = _proc.HasExited ? $" (exit code {_proc.ExitCode})" : "";
-                throw new NoorVoxException(ErrorCodes.EngineBroken, ExitCode.WorkerError, $"The Qwen engine stopped unexpectedly{exit}; see the worker log.");
+                throw new NoorVoxException(ErrorCodes.EngineBroken, ExitCode.WorkerError, $"The {EngineName} engine stopped unexpectedly{exit}; see the worker log.");
             }
-            var msg = JsonNode.Parse(line) as JsonObject ?? throw new InvalidDataException("Qwen engine sent a non-object message.");
+            var msg = JsonNode.Parse(line) as JsonObject ?? throw new InvalidDataException($"{EngineName} engine sent a non-object message.");
             if (msg["event"]?.GetValue<string>() == "progress") // stage report while loading; the reply follows
             {
                 LoadStage = msg["stage"]?.GetValue<string>() switch
                 {
                     "reading" => "Reading the model from disk",
-                    "warmup" => "Preparing the GPU (CUDA graphs)",
+                    "warmup" => "Preparing the GPU",
                     var other => other,
                 };
-                log($"qwen load stage: {LoadStage}");
+                Log($"{BackendId} load stage: {LoadStage}");
                 continue;
             }
             return msg;
         }
     }
 
-    static NoorVoxException ToException(JsonObject reply)
+    NoorVoxException ToException(JsonObject reply)
     {
         var code = reply["error"]?["code"]?.GetValue<string>() ?? ErrorCodes.SynthesisFailed;
-        var message = reply["error"]?["message"]?.GetValue<string>() ?? "Unknown Qwen engine error.";
+        var message = reply["error"]?["message"]?.GetValue<string>() ?? $"Unknown {EngineName} engine error.";
         if (code == ErrorCodes.GpuOutOfMemory)
-            message = "The GPU ran out of memory. Close other GPU-heavy apps (3D, games) or use a 0.6B model. " + message;
+            message = "The GPU ran out of memory. Close other GPU-heavy apps (3D, games), stop other engines in the Monitor, or use a smaller model. " + message;
         return new NoorVoxException(code, WorkerClient.ExitCodeFor(code), message);
     }
 
@@ -269,7 +266,7 @@ public sealed class QwenBackend(Action<string> log) : ITtsBackend, IBackendResou
         {
             if (!p.HasExited)
             {
-                log($"stopping qwen engine PID {p.Id} ({why})");
+                Log($"stopping {EngineName} engine PID {p.Id} ({why})");
                 p.Kill(entireProcessTree: true); // our own child, addressed by its handle
             }
         }
@@ -295,6 +292,7 @@ public sealed class QwenBackend(Action<string> log) : ITtsBackend, IBackendResou
         _proc = null;
         _job?.Dispose(); // kill-on-close: nothing of the engine survives
         _job = null;
-        _model = null;
+        Model = null;
+        GC.SuppressFinalize(this);
     }
 }

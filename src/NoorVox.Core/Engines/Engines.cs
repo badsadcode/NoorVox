@@ -16,7 +16,8 @@ namespace NoorVox.Core.Engines;
 public sealed record CatalogEngine(
     string Id, string Version, string DisplayName, string Description, string Kind,
     string License, string LicenseUrl, string Source, List<CatalogDownload> Downloads, List<PackageFile> Files,
-    string? Lock = null, List<string>? PipIndexUrls = null, long ApproxInstallBytes = 0, List<string>? Requires = null) : ICatalogItem;
+    string? Lock = null, List<string>? PipIndexUrls = null, long ApproxInstallBytes = 0, List<string>? Requires = null,
+    List<string>? VerifyImports = null) : ICatalogItem;
 
 /// <summary><c>noorvox.engine.json</c>, written last: its presence marks a complete engine install.</summary>
 public sealed class EngineManifest
@@ -52,6 +53,7 @@ public static class EngineIds
 {
     public const string QwenTts = "qwen-tts";
     public const string OrtCuda = "onnxruntime-cuda";
+    public const string Chatterbox = "chatterbox";
 }
 
 /// <summary>Reads installed engines (<c>&lt;models&gt;/engines/&lt;id&gt;/&lt;version&gt;</c>). Never downloads.</summary>
@@ -140,7 +142,7 @@ public sealed class EngineInstaller(StorageContext storage, ModelCatalog catalog
             var lockText = ReadLock(engine);
             manifest.LockSha256 = FileUtil.Sha256Text(lockText);
             progress?.Report(new InstallProgress("verifying", engine.Id, "import check", 0, 0));
-            manifest.Verified = await VerifyPythonAsync(Path.Combine(partial, "python", "python.exe"), ct);
+            manifest.Verified = await VerifyPythonAsync(Path.Combine(partial, "python", "python.exe"), engine.VerifyImports ?? [], ct);
         }
         else throw new InvalidDataException($"Unknown engine kind '{engine.Kind}'.");
 
@@ -236,19 +238,25 @@ public sealed class EngineInstaller(StorageContext storage, ModelCatalog catalog
         }
     }
 
-    const string VerifyScript =
-        "import json, sys\n" +
-        "import torch, faster_qwen3_tts, transformers\n" +
-        "ok = torch.cuda.is_available()\n" +
-        "print(json.dumps({'python': sys.version.split()[0], 'torch': torch.__version__, 'transformers': transformers.__version__,\n" +
-        "  'cuda': ok, 'cudaVersion': torch.version.cuda, 'device': torch.cuda.get_device_name(0) if ok else None,\n" +
-        "  'deviceMemoryBytes': torch.cuda.get_device_properties(0).total_memory if ok else None}))\n";
+    /// <summary>Imports torch plus the engine's own modules (catalog <c>verifyImports</c>) in its own Python and reports what it sees.</summary>
+    static string VerifyScript(IEnumerable<string> imports)
+    {
+        foreach (var m in imports)
+            if (!System.Text.RegularExpressions.Regex.IsMatch(m, @"^[A-Za-z_][A-Za-z0-9_.]*$")) throw new InvalidDataException($"Bad module name '{m}' in the catalog.");
+        return "import json, sys, importlib\n" +
+               "import torch\n" +
+               $"for m in {System.Text.Json.JsonSerializer.Serialize(imports)}: importlib.import_module(m)\n" +
+               "ok = torch.cuda.is_available()\n" +
+               "print(json.dumps({'python': sys.version.split()[0], 'torch': torch.__version__,\n" +
+               "  'cuda': ok, 'cudaVersion': torch.version.cuda, 'device': torch.cuda.get_device_name(0) if ok else None,\n" +
+               "  'deviceMemoryBytes': torch.cuda.get_device_properties(0).total_memory if ok else None}))\n";
+    }
 
     /// <summary>Imports the engine in its own Python and reports what it sees (measured, ADR-0002).</summary>
-    public static async Task<Dictionary<string, JsonElement>> VerifyPythonAsync(string pythonExe, CancellationToken ct)
+    public static async Task<Dictionary<string, JsonElement>> VerifyPythonAsync(string pythonExe, IReadOnlyList<string> imports, CancellationToken ct)
     {
         var output = new StringBuilder();
-        int code = await RunAsync(pythonExe, ["-I", "-c", VerifyScript], null, null, line => output.AppendLine(line), ct);
+        int code = await RunAsync(pythonExe, ["-I", "-c", VerifyScript(imports)], null, null, line => output.AppendLine(line), ct);
         var last = output.ToString().Trim().Split('\n').LastOrDefault()?.Trim() ?? "";
         if (code != 0 || !last.StartsWith('{'))
             throw new NoorVoxException(ErrorCodes.EngineBroken, ExitCode.WorkerError, $"The engine does not import cleanly: {output.ToString().Trim()}");

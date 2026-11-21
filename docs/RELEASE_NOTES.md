@@ -1,5 +1,19 @@
 # NoorVox release notes
 
+## 0.4.0 — Chatterbox
+
+- **Chatterbox** (Resemble AI, MIT) as a third engine, in three variants: **English** and **Multilingual** (23 languages) with an
+  **emotion** slider (flat → dramatic) and a gentle **pace** control, and **Turbo** (about 2× faster than real time, no sliders, because
+  the model ignores them). Every variant speaks in any of your voices (cloned, designed or saved) from the reference audio alone.
+- Its output always carries Resemble AI's inaudible **Perth watermark**; NoorVox shows and records that.
+- Separate `chatterbox` engine pack (it needs an older PyTorch than Qwen), hash-locked like the Qwen one.
+- Measured on an RTX 3080: English/Multilingual ≈ real time at 3.5 GB of GPU memory; Turbo ≈ 2× real time at 3.1 GB. Same seed gives
+  the same WAV. Details and the pace measurements: [ADR-0003](adr/0003-chatterbox.md).
+- Under the hood: one shared Python-engine backend for Qwen and Chatterbox; engines declare their own install checks; the catalog's
+  capabilities override stale installed manifests.
+- Fixed: `--no-engine --json` lost the JSON output (parser flag missing; now covered by a test); Chatterbox would have shipped unable
+  to start because of an upstream `pkg_resources` dependency (pinned).
+
 ## 0.3.1 — Voice lab, VoiceDesign and a new title bar
 
 - **Voice lab** page: record your voice in the studio (level meter, clipping warning, ready-made scripts to read), keep a library of
