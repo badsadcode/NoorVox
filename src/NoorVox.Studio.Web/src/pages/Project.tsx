@@ -357,7 +357,7 @@ function SegmentCard({ seg, ov, voices, busy, isLast, playing, onPlay, onChanged
         onSelect={(e) => setCursor(e.currentTarget.selectionStart)} rows={Math.min(8, Math.max(2, Math.ceil(text.length / 95)))}
         aria-label={`Text of ${seg.segmentId}`} placeholder="Type what should be spoken…" />
       {voices?.capabilities?.style && (
-        <input key={seg.styleOverride ?? ""} className="seg-style" defaultValue={seg.styleOverride ?? ""} maxLength={500} aria-label={`Style for ${seg.segmentId}`}
+        <input key={seg.styleOverride ?? ""} className="seg-style" defaultValue={seg.styleOverride ?? ""} maxLength={1000} aria-label={`Style for ${seg.segmentId}`}
           placeholder={seg.effectiveStyle && !seg.styleOverride ? `Style: inherits “${seg.effectiveStyle}”` : "Style for this line (optional), e.g. whispering, angry"}
           onBlur={(e) => { if (e.target.value.trim() !== (seg.styleOverride ?? "")) save({ style: e.target.value.trim() }); }} />
       )}
@@ -474,7 +474,7 @@ function CastPanel({ ov, voices, onChanged }: { ov: ProjectOverview; voices: Voi
     cast(null, v.defaultVoice, { model: reference });
   };
   const StyleInput = ({ value, onSave, label }: { value: string | null | undefined; onSave: (s: string) => void; label: string }) => (
-    <input key={value ?? ""} defaultValue={value ?? ""} maxLength={500} aria-label={label} placeholder="Style directions (optional)"
+    <input key={value ?? ""} defaultValue={value ?? ""} maxLength={1000} aria-label={label} placeholder="Style directions (optional)"
       style={{ marginTop: 6 }} onBlur={(e) => { if (e.target.value.trim() !== (value ?? "")) onSave(e.target.value.trim()); }} />
   );
   const VoiceSelect = ({ value, onPick, label }: { value: string; onPick: (v: string) => void; label: string }) => (

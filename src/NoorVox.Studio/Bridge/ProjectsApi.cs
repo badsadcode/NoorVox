@@ -239,7 +239,9 @@ public sealed class ProjectsApi(MainWindow window, JobObject job, BridgeHost bri
     {
         var p = OpenAllowed(a.Path);
         if (a.Text is { Length: > 20_000 }) throw new NoorVoxException(ErrorCodes.InvalidInput, ExitCode.InvalidInput, "A segment can hold up to 20,000 characters. Split it.");
-        if (a.Style is { Length: > 500 }) throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "Keep style directions under 500 characters.");
+        if (a.Style is { Length: > NoorVox.Core.Narration.NarrationService.MaxStyleChars })
+            throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments,
+                $"Keep style directions under {NoorVox.Core.Narration.NarrationService.MaxStyleChars} characters.");
         if (a.SpeakerId is { Length: > 0 } sp && p.Project.Speakers.All(s => s.SpeakerId != sp))
             throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, $"Unknown speaker '{sp}'.");
         p.UpdateSegment(a.SegmentId, s =>

@@ -110,5 +110,7 @@ public class VoiceLabTests : IDisposable
         var installed = ModelRegistry.ReadPackage(dir);
         Assert.Throws<NoorVoxException>(() => NarrationService.CheckCapabilities(installed, 1.0, null, null, "english"));
         NarrationService.CheckCapabilities(installed, 1.0, "A gravelly old sea captain.", 5, "english");
+        NarrationService.CheckCapabilities(installed, 1.0, new string('a', 1000), null, null);           // the cap is 1,000 characters
+        Assert.Throws<NoorVoxException>(() => NarrationService.CheckCapabilities(installed, 1.0, new string('a', 1001), null, null));
     }
 }

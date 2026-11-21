@@ -407,7 +407,7 @@ function Designer({ onSaved }: { onSaved: () => void }) {
     <section className="panel" aria-label="Design a voice">
       <h2><Wave size={16} /> Design a voice</h2>
       <label className="field" htmlFor="ds-desc">Describe the voice</label>
-      <textarea id="ds-desc" rows={3} maxLength={500} value={description} onChange={(e) => setDescription(e.target.value)}
+      <textarea id="ds-desc" rows={3} maxLength={1000} value={description} onChange={(e) => setDescription(e.target.value)}
         placeholder="Age, gender, accent, timbre, mood, pace… e.g. a gravelly old sea captain, slow and amused" />
       <label className="field" htmlFor="ds-text">Sample sentence (also the voice's reference text)</label>
       <textarea id="ds-text" rows={2} value={text} onChange={(e) => setText(e.target.value)} />

@@ -246,7 +246,7 @@ export function Narrate() {
 
             {(caps?.style || caps?.design) && <>
               <label className="field" htmlFor="style" style={{ marginTop: 14 }}>{caps.design ? "Voice description" : "Style directions"}</label>
-              <textarea id="style" rows={2} maxLength={500} value={style} onChange={(e) => setStyle(e.target.value)}
+              <textarea id="style" rows={2} maxLength={1000} value={style} onChange={(e) => setStyle(e.target.value)}
                 placeholder={caps.design ? "e.g. A gravelly old sea captain, slow, amused, with a soft Scottish accent."
                   : "e.g. Calm, warm documentary narration with a hint of humour. Speak slowly."} />
             </>}

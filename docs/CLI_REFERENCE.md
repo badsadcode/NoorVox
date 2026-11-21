@@ -252,7 +252,7 @@ Stopping a crashed (`error`) worker clears its stale record. `--graceful` is acc
 | `--out FILE.wav` | `<exports>\noorvox_<timestamp>.wav` | Must end in `.wav`. The folder is created if needed. |
 | `--voice ID` | settings → model default (`af_heart`) | Must be installed (`voices list`). |
 | `--speed X` | `1.0` | Kokoro: 0.5 – 2.0. Models without a speed control (Qwen) accept only 1.0 (`unsupported` otherwise). |
-| `--style TEXT` | — | Delivery directions, e.g. `"Calm, warm documentary narration. Speak slowly."` Only models with `capabilities.style` (Qwen CustomVoice 1.7B). Max 500 characters. |
+| `--style TEXT` | — | Delivery directions, e.g. `"Calm, warm documentary narration. Speak slowly."` Only models with `capabilities.style` (Qwen CustomVoice 1.7B), or the voice description for VoiceDesign. Max 1,000 characters (NoorVox's cap; 1–3 concrete sentences work best). |
 | `--seed N` | random | 0 – 2147483647. Models with `capabilities.seed` (Qwen): the same seed, text, settings, GPU and engine give a byte-identical take. The seed used is always reported in `data.seed`. |
 | `--language NAME` | `auto` / profile language | Models with `capabilities.languages` (Qwen): `auto`, `english`, `chinese`, … |
 | `--model REF` | settings → first installed | e.g. `kokoro-82m`, `qwen3-tts-1.7b-customvoice@1.0` |

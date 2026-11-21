@@ -137,6 +137,12 @@ public sealed class NarrationService(StorageContext storage, WorkerSupervisor su
         return narration;
     }
 
+    /// <summary>
+    /// NoorVox's own cap on style directions / VoiceDesign descriptions. The model's real limit is its 2,048-token working memory,
+    /// shared with the text and the generated audio; 1,000 characters is ~250 tokens. Short, concrete descriptions work best.
+    /// </summary>
+    public const int MaxStyleChars = 1000;
+
     /// <summary>Rejects options the model can't honour (AGENTS.md rule 2: no fake controls), with the reason.</summary>
     public static void CheckCapabilities(InstalledModel model, double speed, string? style, long? seed, string? language)
     {
@@ -151,8 +157,8 @@ public sealed class NarrationService(StorageContext storage, WorkerSupervisor su
         if (caps.Design && string.IsNullOrWhiteSpace(style))
             throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments,
                 $"{name} makes a voice from a description: describe it in the style (e.g. \"a warm British woman in her fifties, calm audiobook narrator\").");
-        if (style is { Length: > 500 })
-            throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, "Keep style directions under 500 characters.");
+        if (style is { Length: > MaxStyleChars })
+            throw new NoorVoxException(ErrorCodes.InvalidArguments, ExitCode.InvalidArguments, $"Keep style directions and voice descriptions under {MaxStyleChars} characters.");
         if (seed is not null && !caps.Seed)
             throw new NoorVoxException(ErrorCodes.Unsupported, ExitCode.InvalidArguments, $"{name} has no seed: its output can't be reproduced exactly.");
         if (seed is < 0 or > int.MaxValue)
