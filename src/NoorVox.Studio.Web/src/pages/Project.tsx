@@ -457,6 +457,25 @@ function GeneratePanel({ ov, sectionTitle, sceneTitle, running, status, onGenera
   );
 }
 
+// Defined at module level on purpose: a component declared inside another one is a new type on every render, so React
+// replaces its element each time (the Studio re-renders every 2 s for worker status). That closed open dropdowns and
+// dropped focus from the style box mid-typing.
+function StyleInput({ value, onSave, label }: { value: string | null | undefined; onSave: (s: string) => void; label: string }) {
+  return (
+    <input key={value ?? ""} defaultValue={value ?? ""} maxLength={1000} aria-label={label} placeholder="Style directions (optional)"
+      style={{ marginTop: 6 }} onBlur={(e) => { if (e.target.value.trim() !== (value ?? "")) onSave(e.target.value.trim()); }} />
+  );
+}
+
+function VoiceSelect({ voices, value, onPick, label }: { voices: VoicesResponse | null; value: string; onPick: (v: string) => void; label: string }) {
+  return (
+    <select value={value} aria-label={label} onChange={(e) => onPick(e.target.value)}>
+      {!value && <option value="">(project default)</option>}
+      {voices?.voices.map((v) => <option key={v.id} value={v.id}>{v.displayName} · {v.languageName} · {v.gender}</option>)}
+    </select>
+  );
+}
+
 function CastPanel({ ov, voices, onChanged }: { ov: ProjectOverview; voices: VoicesResponse | null; onChanged: () => void }) {
   const { notify } = useStudio();
   const cast = async (speakerId: string | null, voiceId: string, extra: { style?: string; model?: string } = {}) => {
@@ -473,16 +492,6 @@ function CastPanel({ ov, voices, onChanged }: { ov: ProjectOverview; voices: Voi
     if (!v?.defaultVoice) { if (v) notify("That model has no voices yet (clone one in Quick Narration first).", true); return; }
     cast(null, v.defaultVoice, { model: reference });
   };
-  const StyleInput = ({ value, onSave, label }: { value: string | null | undefined; onSave: (s: string) => void; label: string }) => (
-    <input key={value ?? ""} defaultValue={value ?? ""} maxLength={1000} aria-label={label} placeholder="Style directions (optional)"
-      style={{ marginTop: 6 }} onBlur={(e) => { if (e.target.value.trim() !== (value ?? "")) onSave(e.target.value.trim()); }} />
-  );
-  const VoiceSelect = ({ value, onPick, label }: { value: string; onPick: (v: string) => void; label: string }) => (
-    <select value={value} aria-label={label} onChange={(e) => onPick(e.target.value)}>
-      {!value && <option value="">(project default)</option>}
-      {voices?.voices.map((v) => <option key={v.id} value={v.id}>{v.displayName} · {v.languageName} · {v.gender}</option>)}
-    </select>
-  );
   return (
     <section className="panel">
       <h2>{ov.kind.usesSpeakers ? "Cast" : "Voice"}</h2>
@@ -493,13 +502,13 @@ function CastPanel({ ov, voices, onChanged }: { ov: ProjectOverview; voices: Voi
         </select>
       </>}
       <label className="field">Default voice</label>
-      <VoiceSelect label="Default voice" value={ov.project.defaults.voiceId ?? voices?.defaultVoice ?? ""} onPick={(v) => cast(null, v)} />
+      <VoiceSelect voices={voices} label="Default voice" value={ov.project.defaults.voiceId ?? voices?.defaultVoice ?? ""} onPick={(v) => cast(null, v)} />
       {caps?.style && <StyleInput label="Default style" value={ov.project.defaults.style}
         onSave={(st) => cast(null, ov.project.defaults.voiceId ?? voices?.defaultVoice ?? "", { style: st })} />}
       {ov.project.speakers.filter((s) => ov.kind.usesSpeakers || s.speakerId !== "narrator" || s.voiceId).map((s) => (
         <div key={s.speakerId} style={{ marginTop: 10 }}>
           <label className="field">{s.name}</label>
-          <VoiceSelect label={`Voice for ${s.name}`} value={s.voiceId ?? ""} onPick={(v) => cast(s.speakerId, v)} />
+          <VoiceSelect voices={voices} label={`Voice for ${s.name}`} value={s.voiceId ?? ""} onPick={(v) => cast(s.speakerId, v)} />
           {caps?.style && s.voiceId && <StyleInput label={`Style for ${s.name}`} value={s.style} onSave={(st) => cast(s.speakerId, s.voiceId!, { style: st })} />}
         </div>
       ))}

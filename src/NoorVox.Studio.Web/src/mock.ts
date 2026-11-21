@@ -171,6 +171,8 @@ export async function mockCall(method: string, p: Record<string, any>): Promise<
       for (let i = 0; i <= 10; i++) { emitLocal("install.progress", { target: p.id, stage: "downloading", item: p.id, file: "kokoro.onnx", done: i * 32e6, total: 320e6 }); await delay(150); }
       emitLocal("install.progress", { target: p.id, stage: "done" });
       return { status: "installed" };
+    case "projects.recent":
+      return []; // projects are not mocked; this keeps the page from crashing in the browser preview
     default:
       return {};
   }

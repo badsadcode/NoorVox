@@ -4,8 +4,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
-    <Version>0.4.2</Version>
-    <InformationalVersion>0.4.2</InformationalVersion>
+    <Version>0.4.3</Version>
+    <InformationalVersion>0.4.3</InformationalVersion>
     <Company>Bad Ideas Works</Company>
     <Product>NoorVox</Product>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>

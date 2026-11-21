@@ -1,5 +1,11 @@
 # NoorVox release notes
 
+## 0.4.3 — Cast dropdowns stay open
+
+- **Fixed:** in a project's Cast panel, the voice dropdowns (default voice and each character's voice) closed by themselves before
+  you could pick a voice, and the style box could lose focus while typing. They were rebuilt every time the Studio refreshed worker
+  status (every 2 s). The projects smoke test now checks that the dropdown survives those refreshes.
+
 ## 0.4.2 — Which model does what
 
 - **Voice lab** opens with a three-step strip: make a voice (clone a recording, or design one with Qwen3-TTS VoiceDesign, the only

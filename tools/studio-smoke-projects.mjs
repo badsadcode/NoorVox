@@ -100,6 +100,13 @@ try {
     return await new Promise((res) => { const a = new Audio(takes[0].mediaUrl); a.onloadedmetadata = () => res("ok " + a.duration.toFixed(2)); a.onerror = () => res("error " + (a.error && a.error.message)); setTimeout(() => res("timeout"), 8000); });`);
   check("takes play in the workspace", probe.startsWith("ok") && !/Failed to load/.test(toast), `${probe}${toast ? " · toast: " + toast : ""}`);
 
+  // Regression (0.4.3): the cast voice dropdowns were recreated on every re-render (the worker refresh every 2 s), which closed
+  // them while open. The same <select> element must survive a few refreshes.
+  await s.js(`const el = document.querySelector('select[aria-label="Default voice"]'); el.dataset.smokeTag = "kept"; return true;`);
+  await new Promise((r) => setTimeout(r, 5000));
+  check("cast voice dropdown survives the 2 s refreshes (stays open)",
+    (await s.js(`return document.querySelector('select[aria-label="Default voice"]')?.dataset.smokeTag ?? "replaced";`)) === "kept");
+
   // Pronunciation rule through the UI → spoken text changes, approved segment becomes "changed".
   const typeInto = (sel, value) => s.js(`const el = document.querySelector(${JSON.stringify(sel)}); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
     set.call(el, ${JSON.stringify(value)}); el.dispatchEvent(new Event("input", { bubbles: true })); return true;`);
