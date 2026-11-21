@@ -87,6 +87,20 @@ try {
     await s.bridge("workers.stop", { workerId: "studio", force: false });
   }
 
+  // ---- "Use with…" opens Quick narration with that model and voice selected
+  const usable = (await s.bridge("voices.profiles")).usableWith;
+  if (usable.length) {
+    const target = usable[usable.length - 1].reference;
+    await s.js(`const sel = document.querySelector('select.use-with[aria-label="Use ${prof.name} with a model"]'); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(sel, ${JSON.stringify(target)});
+      sel.dispatchEvent(new Event("change", { bubbles: true })); return true;`);
+    await s.waitFor(`document.querySelector("#model")?.value === ${JSON.stringify(target)} && document.querySelector("#voice")?.value === ${JSON.stringify(voiceId)}`,
+      10000, "Quick narration with the voice selected");
+    check("Use with… opens Quick narration with that model and voice", true, `${target} / ${voiceId}`);
+    await s.shot(shots, "27-use-with");
+  } else {
+    check("Use with… skipped: no installed model speaks your voices", true);
+  }
+
   // ---- clean up through the UI's own methods
   await s.bridge("voices.removeProfile", { id: voiceId });
   voiceId = null;

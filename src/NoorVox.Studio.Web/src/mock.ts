@@ -96,7 +96,7 @@ export async function mockCall(method: string, p: Record<string, any>): Promise<
       mockRecordings = mockRecordings.filter((r) => r.id !== p.id);
       return { id: p.id, recycled: true };
     case "voices.profiles":
-      return { profiles: mockProfiles, usableWith: [{ reference: "qwen3-tts-1.7b-base@1.0", displayName: "Qwen3-TTS 1.7B Base (voice cloning)" }], consentStatements };
+      return { profiles: mockProfiles, usableWith: [{ reference: "qwen3-tts-1.7b-base@1.0", displayName: "Qwen3-TTS 1.7B Base (voice cloning)" }, { reference: "chatterbox-english@1.0", displayName: "Chatterbox (English)" }, { reference: "chatterbox-turbo@1.0", displayName: "Chatterbox Turbo" }], consentStatements };
     case "voices.cloneFromRecording": case "voices.saveTake": {
       const prof = { voiceId: (p.name as string).toLowerCase().replace(/[^a-z0-9]+/g, "_"), name: p.name, kind: method === "voices.saveTake" ? "designed" : "clone",
         language: "english", gender: "unknown", transcript: "…", referenceDurationMs: 8000,

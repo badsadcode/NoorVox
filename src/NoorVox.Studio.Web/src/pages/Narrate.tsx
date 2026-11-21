@@ -15,7 +15,16 @@ const SPEED_KEY = "noorvox.quick.speed";
 const MODEL_KEY = "noorvox.quick.model";
 const STYLE_KEY = "noorvox.quick.style";
 const LANG_KEY = "noorvox.quick.language";
-const KIND_GROUP: Record<string, string> = { clone: "My cloned voices", designed: "My designed voices", synthetic: "My saved voices", blend: "My blended voices" };
+/** What a model does, from its capabilities: speaks built-in voices, speaks your voices (clones/designed), or designs new ones. */
+type ModelRole = "builtin" | "yours" | "design";
+const roleOf = (c: { design?: boolean; cloning: boolean }): ModelRole => c.design ? "design" : c.cloning ? "yours" : "builtin";
+const MODEL_ROLES: [string, ModelRole][] = [["Built-in voices", "builtin"], ["Speaks your voices (Voice lab)", "yours"], ["Designs new voices", "design"]];
+const ROLE_HINT: Record<ModelRole, string> = {
+  builtin: "Speaks its own ready-made voices.",
+  yours: "Speaks the voices you cloned or designed in the Voice lab (My voices).",
+  design: "Makes a brand-new voice from your description each time. Keep the good ones in the Voice lab.",
+};
+const KIND_GROUP: Record<string, string> ={ clone: "My cloned voices", designed: "My designed voices", synthetic: "My saved voices", blend: "My blended voices" };
 const cap = (s: string) => s ? s[0].toUpperCase() + s.slice(1) : s;
 const load = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
 const save = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* storage unavailable */ } };
@@ -261,8 +270,16 @@ export function Narrate() {
             {(voices?.models?.length ?? 0) > 1 && <>
               <label className="field" htmlFor="model">Model</label>
               <select id="model" value={voices?.model ?? ""} onChange={(e) => setModelRef(e.target.value)} disabled={!!busy}>
-                {voices!.models!.map((m) => <option key={m.reference} value={m.reference}>{m.displayName}{m.capabilities.requiresGpu ? " (GPU)" : ""}</option>)}
+                {MODEL_ROLES.map(([label, test]) => {
+                  const ms = voices!.models!.filter((m) => roleOf(m.capabilities) === test);
+                  return ms.length > 0 && (
+                    <optgroup key={label} label={label}>
+                      {ms.map((m) => <option key={m.reference} value={m.reference}>{m.displayName}{m.capabilities.requiresGpu ? " (GPU)" : ""}</option>)}
+                    </optgroup>
+                  );
+                })}
               </select>
+              {caps && <p className="muted small" style={{ margin: "4px 0 0" }}>{ROLE_HINT[roleOf(caps)]}</p>}
             </>}
             <div className="voice-card" style={{ marginTop: 10 }}>
               <Mic size={22} />

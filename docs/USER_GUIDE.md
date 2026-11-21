@@ -116,13 +116,17 @@ Previews are kept in `<Temp>\studio\previews` and removed after 3 days. Export t
 - **My recordings:** your library, kept as WAV + JSON in the Recordings folder (Settings → Storage; the folder button opens it). Click a
   name or transcript to edit it; the audio itself never changes. **Add a WAV file…** copies an existing recording in. **Delete** moves it
   to the Recycle Bin.
-- **Make a voice…** turns a 2–60 s recording into a cloned voice (Qwen Base model). You confirm it's your voice or that you have the
-  speaker's permission. For acting, record the same character in several moods (calm, angry, whispering) and make a voice from each:
-  Qwen copies the delivery as well as the voice.
-- **Design a voice** (needs the Qwen3-TTS 1.7B VoiceDesign model): describe a voice ("a gravelly old sea captain, slow and amused"),
-  press **Design a sample**, and listen. Every sample is a new voice, so make a few and **Keep as voice…** the best one. Kept voices are
-  spoken by the Base model, so they sound the same every time.
-- **My voices:** every cloned, designed and saved voice, with its reference clip, where it came from, and **Remove**.
+- **How it fits together** (the strip at the top of the page): you **make** a voice (clone a recording, or design one from a
+  description), it joins **My voices**, and then any model that speaks your voices uses it: **Chatterbox** (English, Multilingual,
+  Turbo) or **Qwen3-TTS Base**. Kokoro and Qwen CustomVoice only have their own built-in voices.
+- **Make a voice…** turns a 2–60 s recording into a cloned voice. You confirm it's your voice or that you have the speaker's permission.
+  For acting, record the same character in several moods (calm, angry, whispering) and make a voice from each: the models copy the
+  delivery as well as the voice.
+- **Design a voice** uses **Qwen3-TTS 1.7B VoiceDesign**, the only model that creates voices from a description (install it in Models;
+  you don't pick it anywhere, the Voice lab runs it). Describe a voice ("a gravelly old sea captain, slow and amused"), press **Design a
+  sample**, and listen. Every sample is a new voice, so make a few and **Keep as voice…** the best one. Kept voices sound the same every time.
+- **My voices:** every cloned, designed and saved voice, with its reference clip, where it came from, **Use with…** (opens Quick
+  narration with that model and voice already picked) and **Remove**.
 
 Any take in Quick narration that isn't a cloned voice also has **Keep as voice…**.
 

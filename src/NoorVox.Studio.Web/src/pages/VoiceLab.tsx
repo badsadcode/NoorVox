@@ -44,6 +44,15 @@ export function VoiceLab() {
   const [removing, setRemoving] = useState<{ kind: "recording"; r: Recording } | { kind: "profile"; p: VoiceProfileView } | null>(null);
   const player = usePlayer();
 
+  /** Opens Quick narration with this model and voice already selected. */
+  const useVoice = (modelRef: string, voiceId: string) => {
+    try {
+      localStorage.setItem("noorvox.quick.model", modelRef);
+      localStorage.setItem(`noorvox.quick.voice.${modelRef}`, voiceId);
+    } catch { /* storage unavailable: the user picks it there */ }
+    go("narrate");
+  };
+
   const load = useCallback(() => {
     call<{ dir: string; recordings: Recording[] }>("recordings.list").then((r) => { setRecordings(r.recordings); setDir(r.dir); }, (e) => notify(errorText(e), true));
     call<ProfilesResponse>("voices.profiles").then(setProfiles, (e) => notify(errorText(e), true));
@@ -69,9 +78,11 @@ export function VoiceLab() {
         </div>
       </div>
 
+      <HowVoicesWork usableWith={profiles?.usableWith ?? null} />
+
       <div className="lab-grid">
         <Recorder onSaved={(r) => { notify(`Saved “${r.name}”.`); load(); }} />
-        <Designer onSaved={() => load()} />
+        <Designer onSaved={() => load()} speakers={profiles?.usableWith ?? []} />
       </div>
 
       <section className="panel" style={{ marginTop: 16 }} aria-label="Recordings">
@@ -97,7 +108,7 @@ export function VoiceLab() {
       <section className="panel" style={{ marginTop: 16 }} aria-label="My voices">
         <h2>My voices</h2>
         {profiles && profiles.usableWith.length === 0 && (
-          <p className="note">Cloned, designed and saved voices are spoken by a Qwen3-TTS <b>Base</b> model, which isn't installed.
+          <p className="note">No installed model can speak your voices yet. Install <b>Chatterbox</b> (any of the three) or <b>Qwen3-TTS Base</b>.
             <button className="btn small" style={{ marginLeft: 8 }} onClick={() => go("models")}><Download size={14} /> Models</button></p>
         )}
         {profiles?.profiles.length === 0 && <div className="empty">No voices yet. Make one from a recording or a design above.</div>}
@@ -116,7 +127,12 @@ export function VoiceLab() {
                 </div>
                 {p.kind === "clone" && <div className="muted small"><Shield size={12} /> {p.consent.statement}</div>}
               </div>
-              <button className="btn small" onClick={() => go("narrate")} title="Pick it in Quick narration with a Qwen Base model">Use…</button>
+              {profiles.usableWith.length > 0 && (
+                <select className="use-with" aria-label={`Use ${p.name} with a model`} value="" onChange={(e) => { if (e.target.value) useVoice(e.target.value, p.voiceId); }}>
+                  <option value="">Use with…</option>
+                  {profiles.usableWith.map((m) => <option key={m.reference} value={m.reference}>{m.displayName}</option>)}
+                </select>
+              )}
               <button className="btn small ghost danger" onClick={() => setRemoving({ kind: "profile", p })}>Remove</button>
             </div>
           ))}
@@ -125,7 +141,7 @@ export function VoiceLab() {
 
       {cloneFrom && profiles && (
         <CloneFromRecording r={cloneFrom} consent={profiles.consentStatements} onClose={() => setCloneFrom(null)}
-          onCreated={(name) => { setCloneFrom(null); notify(`Voice “${name}” is ready in Quick narration (Qwen Base model).`); load(); }} />
+          onCreated={(name) => { setCloneFrom(null); notify(`Voice “${name}” is ready. Use it with any model listed under “Speak with it”.`); load(); }} />
       )}
       {removing && (
         <Confirm title={removing.kind === "recording" ? `Delete “${removing.r.name}”?` : `Remove the voice “${removing.p.name}”?`}
@@ -362,7 +378,7 @@ function CloneFromRecording({ r, consent, onClose, onCreated }: {
 
 interface DesignTake { key: string; description: string; text: string; mediaUrl: string; outputPath: string; seed: number | null; durationMs: number }
 
-function Designer({ onSaved }: { onSaved: () => void }) {
+function Designer({ onSaved, speakers }: { onSaved: () => void; speakers: { reference: string; displayName: string }[] }) {
   const { notify, go, workers } = useStudio();
   const [voices, setVoices] = useState<VoicesResponse | null>(null);
   const [description, setDescription] = useState("A warm British woman in her fifties, calm and kind, a seasoned audiobook narrator.");
@@ -397,8 +413,9 @@ function Designer({ onSaved }: { onSaved: () => void }) {
     return (
       <section className="panel" aria-label="Design a voice">
         <h2><Wave size={16} /> Design a voice</h2>
-        <p className="muted">Describe a voice in words and Qwen3-TTS VoiceDesign creates it. Keep the ones you like as permanent voices.</p>
-        <p className="note">Needs the <b>Qwen3-TTS 1.7B VoiceDesign</b> model (4.5 GB) and an NVIDIA GPU.</p>
+        <p className="muted">Describe a voice in words and a new voice is created from it. Keep the ones you like as permanent voices.</p>
+        <p className="note">Designing needs <b>Qwen3-TTS 1.7B VoiceDesign</b>, the only model that can create a voice from a description
+          (4.5 GB, NVIDIA GPU). It isn't installed.</p>
         <button className="btn primary" onClick={() => go("models")}><Download size={15} /> Install it on the Models page</button>
       </section>
     );
@@ -406,6 +423,7 @@ function Designer({ onSaved }: { onSaved: () => void }) {
   return (
     <section className="panel" aria-label="Design a voice">
       <h2><Wave size={16} /> Design a voice</h2>
+      <p className="muted small" style={{ marginTop: -4 }}>Model: <b>{design?.displayName}</b>, the only one that designs voices. It runs automatically here.</p>
       <label className="field" htmlFor="ds-desc">Describe the voice</label>
       <textarea id="ds-desc" rows={3} maxLength={1000} value={description} onChange={(e) => setDescription(e.target.value)}
         placeholder="Age, gender, accent, timbre, mood, pace… e.g. a gravelly old sea captain, slow and amused" />
@@ -428,7 +446,8 @@ function Designer({ onSaved }: { onSaved: () => void }) {
           {loading && " · the first sample loads the model (a few minutes from a hard drive)"}
         </p>
       )}
-      <p className="muted small">Each sample is a new voice: generate a few, keep the best. A kept voice is spoken by the Qwen Base model, so it stays the same every time.</p>
+      <p className="muted small">Each sample is a brand-new voice: make a few and keep the best. A kept voice joins <b>My voices</b>, and then
+        {speakers.length ? <> {speakers.map((s) => s.displayName).join(", ")} can speak with it,</> : " a Chatterbox or Qwen Base model can speak with it,"} the same way every time.</p>
       <div className="stack" style={{ gap: 6 }}>
         {takes.map((t) => (
           <div key={t.key} className="pack">
@@ -440,7 +459,7 @@ function Designer({ onSaved }: { onSaved: () => void }) {
           </div>
         ))}
       </div>
-      {saving && <KeepVoiceDialog take={saving} onClose={() => setSaving(null)} onSaved={(name) => { setSaving(null); notify(`Voice “${name}” kept. Use it with the Qwen Base model.`); onSaved(); }} />}
+      {saving && <KeepVoiceDialog take={saving} onClose={() => setSaving(null)} onSaved={(name) => { setSaving(null); notify(`Voice “${name}” kept: it's in My voices below.`); onSaved(); }} />}
     </section>
   );
 }
@@ -473,5 +492,32 @@ export function KeepVoiceDialog({ take, onClose, onSaved }: { take: { outputPath
         </div>
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------- the three steps, in plain words
+
+function HowVoicesWork({ usableWith }: { usableWith: { reference: string; displayName: string }[] | null }) {
+  return (
+    <section className="how" aria-label="How your own voices work">
+      <div className="how-step">
+        <b>1 · Make a voice</b>
+        <span><b>Record</b> yourself (or add a WAV) and press <b>Make a voice…</b> to clone it (with your consent).<br />
+          Or <b>Design</b> one from a description: only Qwen3-TTS VoiceDesign can do this.</span>
+      </div>
+      <div className="how-arrow" aria-hidden="true">→</div>
+      <div className="how-step">
+        <b>2 · It joins My voices</b>
+        <span>Kept for good, with its reference clip and where it came from. Remove it whenever you like.</span>
+      </div>
+      <div className="how-arrow" aria-hidden="true">→</div>
+      <div className="how-step">
+        <b>3 · Speak with it</b>
+        <span>{usableWith === null ? "…" : usableWith.length
+          ? <>Any model that uses your voices: <b>{usableWith.map((m) => m.displayName).join(", ")}</b>. Pick one with <b>Use with…</b>.</>
+          : <>Needs a model that uses your voices (Chatterbox or Qwen3-TTS Base). None is installed yet.</>}
+          <br /><span className="muted">Kokoro and Qwen CustomVoice have their own built-in voices instead.</span></span>
+      </div>
+    </section>
   );
 }

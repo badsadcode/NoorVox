@@ -1,5 +1,14 @@
 # NoorVox release notes
 
+## 0.4.2 — Which model does what
+
+- **Voice lab** opens with a three-step strip: make a voice (clone a recording, or design one with Qwen3-TTS VoiceDesign, the only
+  model that designs), it joins My voices, and the installed models that speak your voices (Chatterbox, Qwen Base) are named.
+- **Use with…** on every voice in My voices opens Quick narration with that model and voice already selected.
+- The Designer names its model, and old texts that said only "Qwen Base" speaks your voices now list every model that does.
+- **Quick narration** groups models by what they do: *Built-in voices* (Kokoro, Qwen CustomVoice), *Speaks your voices* (Qwen Base,
+  Chatterbox), *Designs new voices* (Qwen VoiceDesign), with a one-line hint under the picker.
+
 ## 0.4.1 — Delivery help and a tidier Quick narration
 
 - **Delivery help** under the script shows what the selected model understands, and nothing it doesn't:
