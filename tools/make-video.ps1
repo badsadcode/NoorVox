@@ -1,4 +1,4 @@
-# Builds an MP4 from a NoorVox assembly manifest: one picture per segment, shown from its startMs to the next segment's startMs,
+﻿# Builds an MP4 from a NoorVox assembly manifest: one picture per segment, shown from its startMs to the next segment's startMs,
 # over the assembled WAV, with subtitles burned in, as a soft track, or none. See docs/agent-briefs/VOICEOVER_AND_VIDEO.md §5.
 #
 #   .\tools\make-video.ps1 -Manifest <section.manifest.json> -Out <video.mp4> [-Images <folder>] [-Width 1920] [-Height 1080]

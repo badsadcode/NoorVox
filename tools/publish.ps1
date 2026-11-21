@@ -1,4 +1,4 @@
-# Builds a ready-to-run NoorVox folder: NoorVoxStudio.exe (double-click), noorvox.exe (CLI) and NoorVox.Worker.exe.
+﻿# Builds a ready-to-run NoorVox folder: NoorVoxStudio.exe (double-click), noorvox.exe (CLI) and NoorVox.Worker.exe.
 # Self-contained win-x64: the target PC needs no .NET install (only the Edge WebView2 Runtime, built into Windows 11).
 # Usage:  .\tools\publish.ps1 [-Output E:\Apps\NoorVox] [-Portable] [-Zip]
 #   -Portable  adds noorvox.portable: settings, worker registry and defaults live in <Output>\data instead of %APPDATA%.
@@ -12,6 +12,7 @@ param(
 $ErrorActionPreference = "Stop"
 $repo = Resolve-Path (Join-Path $PSScriptRoot "..")
 $Output = [IO.Path]::GetFullPath($Output)
+$aiGuide = Join-Path $PSScriptRoot "..\docs\NOORVOX_FOR_AI.md"
 
 if (Test-Path (Join-Path $Output "NoorVoxStudio.exe")) {
     if (Get-Process NoorVoxStudio, NoorVox.Worker -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$Output*" }) {
@@ -32,6 +33,7 @@ Remove-Item (Join-Path $Output "voices") -Recurse -Force -ErrorAction SilentlyCo
 Get-ChildItem $Output -Filter *.lib | Remove-Item -Force
 
 Copy-Item (Join-Path $PSScriptRoot "installer\Install.ps1"), (Join-Path $PSScriptRoot "installer\Uninstall.ps1") -Destination $Output -Force
+Copy-Item $aiGuide -Destination $Output -Force                 # NOORVOX_FOR_AI.md: how an AI assistant should use noorvox.exe
 
 if ($Portable) {
     $marker = Join-Path $Output "noorvox.portable"
@@ -45,6 +47,7 @@ NoorVox $version — local voice studio (Bad Ideas Works)
 Install: right-click Install.ps1 > Run with PowerShell (or just run NoorVoxStudio.exe from this folder)
 Start:  NoorVoxStudio.exe
 CLI:    noorvox.exe --help        (docs: https://github.com/badsadcode/NoorVox/tree/main/docs)
+AI:     NOORVOX_FOR_AI.md         (give this file to Codex, Claude, ChatGPT… to let them use NoorVox)
 
 First run asks where to keep models, caches and exports (any drive, C: included), then installs the
 recommended voice (~440 MB, one time). After that everything works offline.

@@ -1,4 +1,4 @@
-# Qwen3-TTS from the command line (NoorVox 0.3.0, NVIDIA GPU required).
+﻿# Qwen3-TTS from the command line (NoorVox 0.3.0, NVIDIA GPU required).
 # Installs the engine + 1.7B CustomVoice if needed, keeps one worker warm, renders three directed lines, proves a seed
 # reproduces a take, then frees the GPU. See docs/AI_INTEGRATION.md §9.
 #   .\examples\qwen-voices.ps1 -Noorvox <path to noorvox.exe> -OutDir E:\AI\NoorVox\Exports\qwen-demo

@@ -1,4 +1,4 @@
-# NoorVox example: what a Codex-style agent does to turn a Markdown script into a finished, verified episode,
+﻿# NoorVox example: what a Codex-style agent does to turn a Markdown script into a finished, verified episode,
 # with no UI: create project → import → generate (resume once if interrupted) → assemble 48 kHz + SRT/VTT + manifest
 # → verify every path and every timing in the manifest → print the manifest for the video agent.
 #

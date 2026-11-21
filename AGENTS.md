@@ -1,6 +1,7 @@
 # AGENTS.md — for coding assistants working on NoorVox
 
 - **Using NoorVox to make audio?** Read `docs/AI_INTEGRATION.md` (cookbook) and `docs/CLI_REFERENCE.md` (exact contract). Don't automate a UI.
+- **Quick start for any AI:** `docs/NOORVOX_FOR_AI.md` (self-contained; also shipped next to `noorvox.exe`).
 - **Asked to turn some files into a voiceover (and a video)?** Follow `docs/agent-briefs/VOICEOVER_AND_VIDEO.md` step by step.
 - **Changing NoorVox?** Read `docs/ARCHITECTURE.md` and `docs/adr/` first. The product spec is `docs/design/NOORVOX_DESIGN.md`. The mockup is guidance, not a goal.
 
